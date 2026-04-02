@@ -1,0 +1,85 @@
+import { useState } from "react";
+import { Menu, X } from "lucide-react";
+
+const navLinks = [
+  { label: "Home", href: "#hero" },
+  { label: "Shop", href: "#shop" },
+  { label: "About", href: "#about" },
+  { label: "Testimonials", href: "#testimonials" },
+  { label: "Locations", href: "#locations" },
+  { label: "Contact", href: "#contact" },
+];
+
+const Navbar = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-charcoal/95 backdrop-blur-md border-b border-gold/20">
+      <div className="container mx-auto flex items-center justify-between py-4 px-4">
+        <a href="#hero" className="font-serif text-xl md:text-2xl font-bold text-cream tracking-wide">
+          Mame's <span className="text-gold">Cane River</span>
+        </a>
+
+        {/* Desktop */}
+        <ul className="hidden md:flex items-center gap-8">
+          {navLinks.map((link) => (
+            <li key={link.href}>
+              <a
+                href={link.href}
+                className="text-cream/80 hover:text-gold transition-colors text-sm font-medium uppercase tracking-wider"
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <a
+          href="#shop"
+          className="hidden md:inline-flex bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg"
+        >
+          Order Now
+        </a>
+
+        {/* Mobile toggle */}
+        <button
+          onClick={() => setOpen(!open)}
+          className="md:hidden text-cream"
+          aria-label="Toggle menu"
+        >
+          {open ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Mobile menu */}
+      {open && (
+        <div className="md:hidden bg-charcoal border-t border-gold/20 pb-6">
+          <ul className="flex flex-col items-center gap-4 pt-4">
+            {navLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  href={link.href}
+                  onClick={() => setOpen(false)}
+                  className="text-cream/80 hover:text-gold transition-colors text-base font-medium uppercase tracking-wider"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+            <li>
+              <a
+                href="#shop"
+                onClick={() => setOpen(false)}
+                className="bg-cajun hover:bg-cajun-light text-cream px-8 py-3 rounded-full text-sm font-semibold transition-all"
+              >
+                Order Now
+              </a>
+            </li>
+          </ul>
+        </div>
+      )}
+    </nav>
+  );
+};
+
+export default Navbar;
