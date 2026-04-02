@@ -1,33 +1,22 @@
-import mameImg1 from "@/assets/mame-kitchen-1.jpg";
-import mameImg2 from "@/assets/mame-kitchen-2.jpg";
+import mameImg from "@/assets/mame-kitchen-2.jpg";
 
 const AboutSection = () => {
   return (
     <section id="about" className="py-24 bg-background">
       <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-16 items-center">
-          {/* Images */}
+          {/* Image */}
           <div className="relative">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl overflow-hidden shadow-2xl">
-                <img
-                  src={mameImg1}
-                  alt="Mame handcrafting meat pies in her kitchen"
-                  loading="lazy"
-                  className="w-full h-64 md:h-[400px] object-cover"
-                />
-              </div>
-              <div className="rounded-2xl overflow-hidden shadow-2xl mt-8">
-                <img
-                  src={mameImg2}
-                  alt="Mame with rows of handmade meat pies"
-                  loading="lazy"
-                  className="w-full h-64 md:h-[400px] object-cover"
-                />
-              </div>
+            <div className="rounded-2xl overflow-hidden shadow-2xl">
+              <img
+                src={mameImg}
+                alt="Mame with rows of handmade Cane River meat pies"
+                loading="lazy"
+                className="w-full h-80 md:h-[500px] object-cover object-top"
+              />
             </div>
             {/* Floating badge */}
-            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-cajun text-cream rounded-2xl p-6 shadow-xl text-center">
+            <div className="absolute -bottom-6 -right-4 md:right-auto md:-left-6 bg-cajun text-cream rounded-2xl p-6 shadow-xl text-center">
               <p className="font-serif text-3xl font-bold">100%</p>
               <p className="text-sm text-cream/80">Authentic Recipe</p>
             </div>
