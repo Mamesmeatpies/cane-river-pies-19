@@ -5,7 +5,7 @@ import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
 import spicyImg from "@/assets/product-spicy.jpg?v=2";
 import turkeyImg from "@/assets/product-turkey.jpg";
-import miniImg from "@/assets/product-mini.jpg";
+import miniImg from "@/assets/mini-pies-tray.png";
 
 interface Product {
   id: string;
