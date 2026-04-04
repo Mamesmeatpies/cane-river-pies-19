@@ -47,7 +47,7 @@ const products: Product[] = [
     description: "Bite-sized perfection — sold in packs of 12. Ideal for parties, events, and snacking.",
     image: miniImg,
     category: "Mini · Pack of 12",
-    price: "$14.99",
+    price: "$20 / dozen",
   },
 ];
 
