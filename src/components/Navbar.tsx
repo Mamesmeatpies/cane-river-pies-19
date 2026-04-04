@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ShoppingCart } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 
 const navLinks = [
   { label: "Home", href: "#hero" },
@@ -12,6 +13,7 @@ const navLinks = [
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
+  const { totalItems, setIsOpen } = useCart();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-charcoal/95 backdrop-blur-md border-b border-gold/20">
@@ -34,21 +36,49 @@ const Navbar = () => {
           ))}
         </ul>
 
-        <a
-          href="#shop"
-          className="hidden md:inline-flex bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg"
-        >
-          Order Now
-        </a>
+        <div className="hidden md:flex items-center gap-4">
+          <button
+            onClick={() => setIsOpen(true)}
+            className="relative text-cream hover:text-gold transition-colors"
+            aria-label="Open cart"
+          >
+            <ShoppingCart size={22} />
+            {totalItems > 0 && (
+              <span className="absolute -top-2 -right-2 bg-cajun text-cream text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {totalItems}
+              </span>
+            )}
+          </button>
+          <a
+            href="#shop"
+            className="bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg"
+          >
+            Order Now
+          </a>
+        </div>
 
         {/* Mobile toggle */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden text-cream"
-          aria-label="Toggle menu"
-        >
-          {open ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex md:hidden items-center gap-3">
+          <button
+            onClick={() => setIsOpen(true)}
+            className="relative text-cream hover:text-gold transition-colors"
+            aria-label="Open cart"
+          >
+            <ShoppingCart size={22} />
+            {totalItems > 0 && (
+              <span className="absolute -top-2 -right-2 bg-cajun text-cream text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {totalItems}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setOpen(!open)}
+            className="text-cream"
+            aria-label="Toggle menu"
+          >
+            {open ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}

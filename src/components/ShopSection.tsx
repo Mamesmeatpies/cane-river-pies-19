@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { toast } from "sonner";
 // @ts-ignore
 import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
@@ -14,6 +16,7 @@ interface Product {
   image: string;
   category: string;
   price: string;
+  priceNum: number;
 }
 
 const products: Product[] = [
@@ -24,6 +27,7 @@ const products: Product[] = [
     image: beefPorkImg,
     category: "Full Size",
     price: "$35 / dozen",
+    priceNum: 35,
   },
   {
     id: "spicy",
@@ -32,6 +36,7 @@ const products: Product[] = [
     image: spicyImg,
     category: "Full Size",
     price: "$35 / dozen",
+    priceNum: 35,
   },
   {
     id: "turkey",
@@ -40,6 +45,7 @@ const products: Product[] = [
     image: turkeyImg,
     category: "Full Size",
     price: "$35 / dozen",
+    priceNum: 35,
   },
   {
     id: "mini",
@@ -48,11 +54,22 @@ const products: Product[] = [
     image: miniImg,
     category: "Mini · Pack of 12",
     price: "$20 / dozen",
+    priceNum: 20,
   },
 ];
 
 const ProductCard = ({ product }: { product: Product }) => {
   const [qty, setQty] = useState(1);
+  const { addItem } = useCart();
+
+  const handleAdd = () => {
+    addItem(
+      { id: product.id, name: product.name, price: product.price, priceNum: product.priceNum, image: product.image },
+      qty
+    );
+    toast.success(`${qty}x ${product.name} added to cart`);
+    setQty(1);
+  };
 
   return (
     <div className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-border">
@@ -92,7 +109,10 @@ const ProductCard = ({ product }: { product: Product }) => {
               <Plus size={16} />
             </button>
           </div>
-          <button className="flex-1 flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3 rounded-full font-semibold transition-all hover:shadow-lg text-sm">
+          <button
+            onClick={handleAdd}
+            className="flex-1 flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3 rounded-full font-semibold transition-all hover:shadow-lg text-sm"
+          >
             <ShoppingCart size={16} />
             Add to Cart
           </button>
