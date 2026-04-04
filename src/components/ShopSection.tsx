@@ -23,7 +23,7 @@ const products: Product[] = [
     description: "Our classic Cane River recipe with premium seasoned beef and pork in a golden, flaky crust.",
     image: beefPorkImg,
     category: "Full Size",
-    price: "$8.99",
+    price: "$35 / dozen",
   },
   {
     id: "spicy",
@@ -31,7 +31,7 @@ const products: Product[] = [
     description: "The classic turned up with Cajun heat — bold spices wrapped in golden pastry perfection.",
     image: spicyImg,
     category: "Full Size",
-    price: "$8.99",
+    price: "$35 / dozen",
   },
   {
     id: "turkey",
@@ -39,7 +39,7 @@ const products: Product[] = [
     description: "A lighter twist on tradition — seasoned turkey in a handcrafted flaky crust.",
     image: turkeyImg,
     category: "Full Size",
-    price: "$8.99",
+    price: "$35 / dozen",
   },
   {
     id: "mini",
