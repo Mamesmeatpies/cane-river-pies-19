@@ -26,17 +26,14 @@ const HeroSection = () => {
         </div>
 
         <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl font-bold text-cream leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-          From Mame's Kitchen
+          Handcrafted Meat Pies.
           <br />
-          <span className="text-gold">Recipe to Your Table</span>
+          No Fillers.{" "}
+          <span className="text-gold">Bold Southern Flavor.</span>
         </h1>
 
-        <p className="text-cream/80 text-lg md:text-xl max-w-2xl mx-auto mb-4 animate-fade-in-up font-sans" style={{ animationDelay: "0.3s" }}>
-          Authentic Cane River Louisiana flavor handcrafted in Houston, Texas.
-        </p>
-
-        <p className="text-gold/70 text-sm uppercase tracking-widest mb-10 animate-fade-in-up font-sans" style={{ animationDelay: "0.4s" }}>
-          Handcrafted in Houston, TX
+        <p className="text-cream/80 text-lg md:text-xl max-w-2xl mx-auto mb-10 animate-fade-in-up font-sans" style={{ animationDelay: "0.3s" }}>
+          From Mame's kitchen recipe to your table.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
