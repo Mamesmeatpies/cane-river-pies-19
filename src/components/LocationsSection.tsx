@@ -4,10 +4,12 @@ const locations = [
   {
     name: "Frenchy's Chicken",
     details: "Houston, TX — Multiple Locations",
+    link: "https://frenchyschicken.com",
   },
   {
     name: "Frisco Fresh Market",
     details: "Ratcliff Premium Meats Booth",
+    link: "#",
   },
 ];
 
