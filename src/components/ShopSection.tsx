@@ -3,7 +3,7 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 // @ts-ignore
 import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
-import spicyImg from "@/assets/product-spicy.jpg?v=2";
+import spicyImg from "@/assets/product-spicy.png";
 import turkeyImg from "@/assets/product-turkey.png";
 import miniImg from "@/assets/mini-pies-tray.png";
 
