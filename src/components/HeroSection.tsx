@@ -17,12 +17,14 @@ const HeroSection = () => {
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 text-center pt-20">
-        <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl font-bold text-cream leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-          Handcrafted Meat Pies.
+        <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl font-bold text-cream leading-tight mb-2 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
+          Hand Crafted Meat Pies,
           <br />
-          No Fillers.{" "}
           <span className="text-gold">Bold Southern Flavor.</span>
         </h1>
+        <p className="font-serif text-xl sm:text-2xl md:text-3xl text-cream/90 mb-6 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+          No Fillers.
+        </p>
 
         <p className="text-cream/80 text-lg md:text-xl max-w-2xl mx-auto mb-6 animate-fade-in-up font-sans" style={{ animationDelay: "0.3s" }}>
           From Mame's kitchen recipe to your table.
