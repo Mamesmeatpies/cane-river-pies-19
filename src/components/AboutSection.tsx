@@ -37,9 +37,9 @@ const AboutSection = () => {
               </p>
               <p>
                 Inspired by Mame's own kitchen, our recipe has been passed down through generations,
-                preserving the authentic flavors of Louisiana's rich culinary heritage. Each pie is
-                handcrafted with premium ingredients and seasoned with the same love and care that
-                Mame put into every batch.
+                preserving the authentic flavors of Cane River Louisiana's rich culinary heritage.
+                Each pie is handcrafted with premium ingredients and seasoned with the same love and
+                care that Mame put into every batch.
               </p>
               <p>
                 Now based in Houston, Texas, we're on a mission to bring authentic Cane River
