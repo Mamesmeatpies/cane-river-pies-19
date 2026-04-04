@@ -1,4 +1,4 @@
-import heroImg from "@/assets/hero-meatpies.jpg";
+import heroImg from "@/assets/hero-meat-pies.png";
 
 const HeroSection = () => {
   return (
