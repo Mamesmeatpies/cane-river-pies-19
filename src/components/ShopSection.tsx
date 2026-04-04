@@ -4,7 +4,7 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
 import spicyImg from "@/assets/product-spicy.jpg?v=2";
-import turkeyImg from "@/assets/product-turkey.jpg";
+import turkeyImg from "@/assets/product-turkey.png";
 import miniImg from "@/assets/mini-pies-tray.png";
 
 interface Product {
