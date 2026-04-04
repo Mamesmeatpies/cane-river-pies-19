@@ -21,7 +21,7 @@ const HeroSection = () => {
         <div className="inline-flex items-center gap-2 bg-gold/20 border border-gold/40 rounded-full px-5 py-2 mb-8 animate-fade-in-up">
           <span className="w-2 h-2 bg-gold rounded-full" />
           <span className="text-gold text-sm font-medium tracking-wide uppercase">
-            Authentic Cane River Louisiana Recipe
+            🏆 3-Time Natchitoches Meat Pie Festival Champion
           </span>
         </div>
 
