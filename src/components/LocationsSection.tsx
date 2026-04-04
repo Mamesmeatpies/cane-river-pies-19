@@ -39,7 +39,9 @@ const LocationsSection = () => {
               <h3 className="font-serif text-xl font-bold text-foreground mb-2">{loc.name}</h3>
               <p className="text-muted-foreground text-sm mb-6">{loc.details}</p>
               <a
-                href="#"
+                href={loc.link}
+                target={loc.link !== "#" ? "_blank" : undefined}
+                rel={loc.link !== "#" ? "noopener noreferrer" : undefined}
                 className="inline-flex items-center gap-2 border-2 border-cajun text-cajun hover:bg-cajun hover:text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all"
               >
                 Visit Location
