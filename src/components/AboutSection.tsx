@@ -12,7 +12,7 @@ const AboutSection = () => {
                 src={mameImg}
                 alt="Mame with rows of handmade Cane River meat pies"
                 loading="lazy"
-                className="w-full h-80 md:h-[500px] object-cover object-top"
+                className="w-full h-auto object-contain"
               />
             </div>
             {/* Floating badge */}
