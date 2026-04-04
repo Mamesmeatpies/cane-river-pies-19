@@ -17,14 +17,6 @@ const HeroSection = () => {
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 text-center pt-20">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 bg-gold/20 border border-gold/40 rounded-full px-5 py-2 mb-8 animate-fade-in-up">
-          <span className="w-2 h-2 bg-gold rounded-full" />
-          <span className="text-gold text-sm font-medium tracking-wide uppercase">
-            🏆 3-Time Natchitoches Meat Pie Festival Champion
-          </span>
-        </div>
-
         <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl font-bold text-cream leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
           Handcrafted Meat Pies.
           <br />
@@ -32,9 +24,16 @@ const HeroSection = () => {
           <span className="text-gold">Bold Southern Flavor.</span>
         </h1>
 
-        <p className="text-cream/80 text-lg md:text-xl max-w-2xl mx-auto mb-10 animate-fade-in-up font-sans" style={{ animationDelay: "0.3s" }}>
+        <p className="text-cream/80 text-lg md:text-xl max-w-2xl mx-auto mb-6 animate-fade-in-up font-sans" style={{ animationDelay: "0.3s" }}>
           From Mame's kitchen recipe to your table.
         </p>
+
+        {/* Champion Badge */}
+        <div className="inline-flex items-center gap-2 bg-gold/20 border border-gold/40 rounded-full px-5 py-2 mb-10 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+          <span className="text-gold text-sm font-medium tracking-wide uppercase">
+            🏆 3-Time Natchitoches Meat Pie Festival Champion
+          </span>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
           <a
