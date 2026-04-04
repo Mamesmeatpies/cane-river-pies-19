@@ -9,7 +9,7 @@ const locations = [
   {
     name: "Frisco Fresh Market",
     details: "Ratcliff Premium Meats Booth",
-    link: "#",
+    link: "https://friscofreshmarket.com",
   },
 ];
 
