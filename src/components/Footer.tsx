@@ -49,15 +49,19 @@ const Footer = () => {
             </ul>
             <div className="flex gap-4 mt-6">
               <a
-                href="#"
+                href="https://www.instagram.com/mamescanerivermeatpies/"
                 aria-label="Instagram"
+                target="_blank"
+                rel="noreferrer"
                 className="w-10 h-10 rounded-full border border-cream/20 flex items-center justify-center text-cream/60 hover:text-gold hover:border-gold transition-all"
               >
                 <Instagram size={18} />
               </a>
               <a
-                href="#"
+                href="https://www.facebook.com/mamescanerivermeatpies/"
                 aria-label="Facebook"
+                target="_blank"
+                rel="noreferrer"
                 className="w-10 h-10 rounded-full border border-cream/20 flex items-center justify-center text-cream/60 hover:text-gold hover:border-gold transition-all"
               >
                 <Facebook size={18} />
