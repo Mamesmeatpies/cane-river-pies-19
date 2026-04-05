@@ -49,7 +49,7 @@ const Footer = () => {
             </ul>
             <div className="flex gap-4 mt-6">
               <a
-                href="https://www.instagram.com/mamescanerivermeatpies/"
+                href="https://www.instagram.com/mamesmeatpies/"
                 aria-label="Instagram"
                 target="_blank"
                 rel="noreferrer"
