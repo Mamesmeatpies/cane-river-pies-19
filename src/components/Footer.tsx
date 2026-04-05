@@ -58,7 +58,7 @@ const Footer = () => {
                 <Instagram size={18} />
               </a>
               <a
-                href="https://www.facebook.com/mamescanerivermeatpies/"
+                href="https://www.facebook.com/mamescanerivermeatpies"
                 aria-label="Facebook"
                 target="_blank"
                 rel="noreferrer"
