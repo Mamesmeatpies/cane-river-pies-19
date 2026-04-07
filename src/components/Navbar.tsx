@@ -19,7 +19,7 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-charcoal/95 backdrop-blur-md border-b border-gold/20">
       <div className="container mx-auto flex items-center justify-between py-4 px-4">
         <a href="#hero" className="font-serif text-xl md:text-2xl font-bold text-cream tracking-wide">
-          Mame's <span className="text-gold">Cane River</span>
+          Mame's <span className="text-gold">Cane River Meat Pies</span>
         </a>
 
         {/* Desktop */}

@@ -8,7 +8,7 @@ const Footer = () => {
           {/* Brand */}
           <div>
             <h3 className="font-serif text-2xl font-bold text-cream mb-4">
-              Mame's <span className="text-gold">Cane River</span>
+              Mame's <span className="text-gold">Cane River Meat Pies</span>
             </h3>
             <p className="text-cream/60 text-sm leading-relaxed">
               Authentic Cane River Louisiana meat pies, handcrafted in Houston, Texas. 
