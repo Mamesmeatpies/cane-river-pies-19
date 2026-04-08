@@ -1,4 +1,5 @@
 import heroImg from "@/assets/hero-meat-pies.png";
+import mamePortrait from "@/assets/mame-portrait-2026.jpg";
 
 const HeroSection = () => {
   return (
@@ -15,8 +16,28 @@ const HeroSection = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/70 to-charcoal/30" />
       </div>
 
+      <div className="absolute right-4 top-24 z-10 w-24 sm:w-32 md:w-40 lg:right-10 lg:top-28 lg:w-44">
+        <div className="rounded-[1.75rem] border border-cream/20 bg-charcoal/35 p-2 shadow-2xl backdrop-blur-sm">
+          <div className="overflow-hidden rounded-[1.25rem]">
+            <img
+              src={mamePortrait}
+              alt="Mame, whose family recipe inspires every Cane River Meat Pie"
+              className="h-full w-full object-cover"
+              width={595}
+              height={842}
+            />
+          </div>
+          <div className="px-3 pb-2 pt-3 text-center">
+            <p className="font-serif text-sm text-cream sm:text-base">Mame's Legacy</p>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-gold/90 sm:text-xs">
+              The heart behind every meatpie
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Content */}
-      <div className="relative z-10 container mx-auto px-4 text-center pt-20">
+      <div className="relative z-10 container mx-auto px-4 pb-20 pt-20 text-center md:pb-24">
         <h1 className="font-serif text-4xl sm:text-5xl md:text-7xl font-bold text-cream leading-tight mb-2 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
           Hand Crafted Meat Pies,
           <br />
