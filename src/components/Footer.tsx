@@ -2,9 +2,9 @@ import { Instagram, Facebook } from "lucide-react";
 
 const Footer = () => {
   return (
-    <footer className="bg-charcoal pt-16 pb-8">
+    <footer className="bg-charcoal pt-14 pb-8 md:pt-16">
       <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-3 gap-12 mb-12">
+        <div className="mb-10 grid gap-10 text-center md:mb-12 md:grid-cols-3 md:gap-12 md:text-left">
           {/* Brand */}
           <div>
             <h3 className="font-serif text-2xl font-bold text-cream mb-4">
@@ -47,7 +47,7 @@ const Footer = () => {
               </li>
               <li>Houston, Texas</li>
             </ul>
-            <div className="flex gap-4 mt-6">
+            <div className="mt-6 flex justify-center gap-4 md:justify-start">
               <a
                 href="https://www.instagram.com/mamesmeatpies/"
                 aria-label="Instagram"

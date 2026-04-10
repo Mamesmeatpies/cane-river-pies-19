@@ -13,19 +13,19 @@ const ContactSection = () => {
   };
 
   return (
-    <section id="contact" className="py-24 bg-background">
+    <section id="contact" className="bg-background py-16 md:py-24">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
+        <div className="mb-12 text-center md:mb-16">
           <span className="text-gold font-semibold text-sm uppercase tracking-widest">Get in Touch</span>
-          <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground mt-3 mb-4">
+          <h2 className="mt-3 mb-4 font-serif text-3xl font-bold text-foreground md:text-5xl">
             Contact Us
           </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">
             Interested in orders, events, wholesale, or retail opportunities? Reach out to us.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-12 max-w-5xl mx-auto">
+        <div className="mx-auto grid max-w-5xl gap-10 md:grid-cols-2 md:gap-12">
           {/* Info */}
           <div className="space-y-8">
             <div className="flex items-start gap-4">
@@ -52,7 +52,7 @@ const ContactSection = () => {
               </div>
             </div>
 
-            <div className="bg-cajun rounded-2xl p-8 text-cream mt-8">
+            <div className="mt-8 rounded-2xl bg-cajun p-6 text-cream sm:p-8">
               <h3 className="font-serif text-xl font-bold mb-3">Ready to Partner?</h3>
               <p className="text-cream/80 text-sm leading-relaxed">
                 We're always looking for new retail locations, event opportunities, and wholesale partnerships. 
@@ -62,7 +62,7 @@ const ContactSection = () => {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             <input
               type="text"
               placeholder="Your Name"

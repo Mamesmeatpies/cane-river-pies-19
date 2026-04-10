@@ -72,7 +72,7 @@ const ProductCard = ({ product }: { product: Product }) => {
   };
 
   return (
-    <div className="group bg-card rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-border">
+    <div className="group overflow-hidden rounded-2xl border border-border bg-card shadow-md transition-all duration-300 hover:shadow-xl">
       <div className="relative overflow-hidden aspect-square">
         <img
           src={product.image}
@@ -82,17 +82,17 @@ const ProductCard = ({ product }: { product: Product }) => {
           height={800}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        <span className="absolute top-4 left-4 bg-charcoal/80 text-gold text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-full">
+        <span className="absolute left-3 top-3 rounded-full bg-charcoal/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gold sm:left-4 sm:top-4 sm:text-xs">
           {product.category}
         </span>
       </div>
-      <div className="p-6">
-        <h3 className="font-serif text-xl font-bold text-foreground mb-2">{product.name}</h3>
-        <p className="text-muted-foreground text-sm mb-4 leading-relaxed">{product.description}</p>
-        <p className="text-cajun font-bold text-2xl mb-4">{product.price}</p>
+      <div className="p-5 sm:p-6">
+        <h3 className="mb-2 font-serif text-lg font-bold text-foreground sm:text-xl">{product.name}</h3>
+        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+        <p className="mb-4 text-2xl font-bold text-cajun">{product.price}</p>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center border border-border rounded-full">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center justify-center rounded-full border border-border sm:justify-start">
             <button
               onClick={() => setQty(Math.max(1, qty - 1))}
               className="p-2 hover:bg-muted rounded-l-full transition-colors"
@@ -111,7 +111,7 @@ const ProductCard = ({ product }: { product: Product }) => {
           </div>
           <button
             onClick={handleAdd}
-            className="flex-1 flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3 rounded-full font-semibold transition-all hover:shadow-lg text-sm"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-cajun py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-cajun-light hover:shadow-lg sm:flex-1"
           >
             <ShoppingCart size={16} />
             Add to Cart
@@ -124,19 +124,19 @@ const ProductCard = ({ product }: { product: Product }) => {
 
 const ShopSection = () => {
   return (
-    <section id="shop" className="py-24 bg-cream-dark">
+    <section id="shop" className="bg-cream-dark py-16 md:py-24">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
+        <div className="mb-12 text-center md:mb-16">
           <span className="text-gold font-semibold text-sm uppercase tracking-widest">Our Products</span>
-          <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground mt-3 mb-4">
+          <h2 className="mt-3 mb-4 font-serif text-3xl font-bold text-foreground md:text-5xl">
             Taste the Tradition
           </h2>
-          <p className="text-muted-foreground max-w-xl mx-auto">
+          <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">
             Each meat pie is handcrafted using Mame's original Cane River recipe — premium ingredients, bold seasoning, and a golden flaky crust.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

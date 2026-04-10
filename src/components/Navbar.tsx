@@ -16,10 +16,14 @@ const Navbar = () => {
   const { totalItems, setIsOpen } = useCart();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-charcoal/95 backdrop-blur-md border-b border-gold/20">
-      <div className="container mx-auto flex items-center justify-between py-4 px-4">
-        <a href="#hero" className="font-serif text-xl md:text-2xl font-bold text-cream tracking-wide">
-          Mame's <span className="text-gold">Cane River Meat Pies</span>
+    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gold/20 bg-charcoal/95 backdrop-blur-md">
+      <div className="container mx-auto flex items-center justify-between px-4 py-3 md:py-4">
+        <a
+          href="#hero"
+          className="max-w-[12.5rem] font-serif text-base font-bold leading-tight tracking-wide text-cream sm:max-w-none sm:text-lg md:text-2xl"
+        >
+          <span className="block sm:inline">Mame's </span>
+          <span className="text-gold">Cane River Meat Pies</span>
         </a>
 
         {/* Desktop */}
@@ -58,10 +62,10 @@ const Navbar = () => {
         </div>
 
         {/* Mobile toggle */}
-        <div className="flex md:hidden items-center gap-3">
+        <div className="flex items-center gap-3 md:hidden">
           <button
             onClick={() => setIsOpen(true)}
-            className="relative text-cream hover:text-gold transition-colors"
+            className="relative rounded-full p-2 text-cream transition-colors hover:text-gold"
             aria-label="Open cart"
           >
             <ShoppingCart size={22} />
@@ -73,7 +77,7 @@ const Navbar = () => {
           </button>
           <button
             onClick={() => setOpen(!open)}
-            className="text-cream"
+            className="rounded-full p-2 text-cream"
             aria-label="Toggle menu"
           >
             {open ? <X size={24} /> : <Menu size={24} />}
@@ -83,14 +87,14 @@ const Navbar = () => {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden bg-charcoal border-t border-gold/20 pb-6">
-          <ul className="flex flex-col items-center gap-4 pt-4">
+        <div className="border-t border-gold/20 bg-charcoal pb-6 md:hidden">
+          <ul className="flex flex-col gap-2 px-4 pt-4">
             {navLinks.map((link) => (
               <li key={link.href}>
                 <a
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="text-cream/80 hover:text-gold transition-colors text-base font-medium uppercase tracking-wider"
+                  className="block rounded-2xl border border-transparent bg-charcoal-light/40 px-4 py-3 text-center text-sm font-medium uppercase tracking-wider text-cream/80 transition-colors hover:border-gold/20 hover:text-gold"
                 >
                   {link.label}
                 </a>
@@ -100,7 +104,7 @@ const Navbar = () => {
               <a
                 href="#shop"
                 onClick={() => setOpen(false)}
-                className="bg-cajun hover:bg-cajun-light text-cream px-8 py-3 rounded-full text-sm font-semibold transition-all"
+                className="mt-2 block rounded-full bg-cajun px-8 py-3 text-center text-sm font-semibold text-cream transition-all hover:bg-cajun-light"
               >
                 Order Now
               </a>

@@ -25,27 +25,27 @@ const testimonials = [
 
 const TestimonialsSection = () => {
   return (
-    <section id="testimonials" className="py-24 bg-charcoal">
+    <section id="testimonials" className="bg-charcoal py-16 md:py-24">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
+        <div className="mb-12 text-center md:mb-16">
           <span className="text-gold font-semibold text-sm uppercase tracking-widest">Testimonials</span>
-          <h2 className="font-serif text-3xl md:text-5xl font-bold text-cream mt-3 mb-4">
+          <h2 className="mt-3 mb-4 font-serif text-3xl font-bold text-cream md:text-5xl">
             What Our Customers Say
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4 lg:gap-6">
           {testimonials.map((t, i) => (
             <div
               key={i}
-              className="bg-charcoal-light rounded-2xl p-8 border border-gold/10 hover:border-gold/30 transition-all duration-300"
+              className="rounded-2xl border border-gold/10 bg-charcoal-light p-6 transition-all duration-300 hover:border-gold/30 sm:p-8"
             >
               <div className="flex gap-1 mb-4">
                 {[...Array(5)].map((_, j) => (
                   <Star key={j} size={16} className="fill-gold text-gold" />
                 ))}
               </div>
-              <p className="text-cream/80 leading-relaxed mb-6 italic font-sans">"{t.text}"</p>
+              <p className="mb-6 font-sans italic leading-relaxed text-cream/80">"{t.text}"</p>
               <div>
                 <p className="text-cream font-semibold">{t.name}</p>
                 <p className="text-gold/60 text-sm">{t.location}</p>
