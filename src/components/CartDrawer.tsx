@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Minus, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
+import { CreditCard, Minus, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { buildStripePaymentLink, hasStripePaymentLink } from "@/lib/stripePaymentLink";
 
 const CartDrawer = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isOpen, setIsOpen } = useCart();
@@ -11,16 +12,9 @@ const CartDrawer = () => {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      toast.error("Please fill in your name, email, and phone number.");
-      return;
-    }
-    setSubmitting(true);
-
+  const submitEmailOrder = () => {
     const orderLines = items
-      .map((i) => `${i.name} x${i.quantity} — $${(i.priceNum * i.quantity).toFixed(2)}`)
+      .map((i) => `${i.name} x${i.quantity} - $${(i.priceNum * i.quantity).toFixed(2)}`)
       .join("\n");
 
     const body = `New Order from ${form.name}\nEmail: ${form.email}\nPhone: ${form.phone}\n\nItems:\n${orderLines}\n\nTotal: $${totalPrice.toFixed(2)}\n\nNotes: ${form.notes || "None"}`;
@@ -32,8 +26,38 @@ const CartDrawer = () => {
     clearCart();
     setShowCheckout(false);
     setForm({ name: "", email: "", phone: "", notes: "" });
-    setSubmitting(false);
     setIsOpen(false);
+  };
+
+  const submitStripeOrder = () => {
+    const stripeUrl = buildStripePaymentLink({ email: form.email, items });
+
+    if (!stripeUrl) {
+      toast.error("Add your Stripe sandbox Payment Link URL to VITE_STRIPE_PAYMENT_LINK_URL first.");
+      return false;
+    }
+
+    toast.success("Opening secure Stripe checkout.");
+    window.location.href = stripeUrl;
+    return true;
+  };
+
+  const handleSubmit = (e: React.SyntheticEvent, paymentMethod: "stripe" | "email") => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
+      toast.error("Please fill in your name, email, and phone number.");
+      return;
+    }
+    setSubmitting(true);
+
+    if (paymentMethod === "stripe") {
+      if (!submitStripeOrder()) {
+        setSubmitting(false);
+      }
+    } else {
+      submitEmailOrder();
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -62,7 +86,7 @@ const CartDrawer = () => {
               <p className="text-muted-foreground">Your cart is empty</p>
             </div>
           ) : showCheckout ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => handleSubmit(e, "stripe")} className="space-y-4">
               <h3 className="font-serif text-lg font-bold text-foreground mb-2">Contact Info</h3>
               <input
                 type="text"
@@ -110,8 +134,22 @@ const CartDrawer = () => {
                   disabled={submitting}
                   className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg disabled:opacity-50"
                 >
-                  <Send size={16} />
-                  Send Order
+                  <CreditCard size={16} />
+                  Pay with Stripe
+                </button>
+                {!hasStripePaymentLink() && (
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Add your sandbox Payment Link URL to VITE_STRIPE_PAYMENT_LINK_URL to turn on Stripe checkout.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => handleSubmit(e, "email")}
+                  disabled={submitting}
+                  className="w-full mt-2 flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  <Send size={15} />
+                  Send order by email
                 </button>
                 <button
                   type="button"
