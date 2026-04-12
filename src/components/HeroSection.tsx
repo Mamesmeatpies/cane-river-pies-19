@@ -1,11 +1,8 @@
-import type { MouseEvent } from "react";
 import heroImg from "@/assets/hero-meat-pies.png";
 import mamePortrait from "@/assets/mame-portrait-2026.jpg";
 
 const HeroSection = () => {
-  const scrollToStory = (event: MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-
+  const scrollToStory = () => {
     document.getElementById("about")?.scrollIntoView({ behavior: "smooth", block: "start" });
     window.history.pushState(null, "", "#about");
   };
@@ -25,11 +22,11 @@ const HeroSection = () => {
       </div>
 
       <div className="absolute right-4 top-24 z-20 hidden w-24 sm:w-32 md:block md:w-36 lg:right-10 lg:top-28 lg:w-44">
-        <a
-          href="#about"
+        <button
+          type="button"
           onClick={scrollToStory}
           aria-label="Read Mame's story"
-          className="block cursor-pointer rounded-[1.75rem] border border-cream/20 bg-charcoal/35 p-2 shadow-2xl backdrop-blur-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+          className="block w-full cursor-pointer rounded-[1.75rem] border border-cream/20 bg-charcoal/35 p-2 shadow-2xl backdrop-blur-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
         >
           <div className="overflow-hidden rounded-[1.25rem]">
             <img
@@ -46,13 +43,13 @@ const HeroSection = () => {
               The heart behind every meatpie
             </p>
           </div>
-        </a>
+        </button>
       </div>
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 pb-16 pt-28 text-center sm:pb-20 md:pb-24 md:pt-20">
-        <a
-          href="#about"
+        <button
+          type="button"
           onClick={scrollToStory}
           aria-label="Read Mame's story"
           className="mx-auto mb-6 flex w-fit max-w-[11rem] cursor-pointer flex-col rounded-[1.5rem] border border-cream/20 bg-charcoal/45 p-2 shadow-xl backdrop-blur-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold md:hidden"
@@ -72,7 +69,7 @@ const HeroSection = () => {
               The heart behind every meatpie
             </p>
           </div>
-        </a>
+        </button>
 
         <h1 className="mb-3 animate-fade-in-up font-serif text-4xl font-bold leading-tight text-cream sm:text-5xl md:mb-2 md:text-7xl" style={{ animationDelay: "0.15s" }}>
           Hand Crafted Meat Pies,
