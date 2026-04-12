@@ -16,8 +16,12 @@ const HeroSection = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/70 to-charcoal/30" />
       </div>
 
-      <div className="absolute right-4 top-24 z-10 hidden w-24 sm:w-32 md:block md:w-36 lg:right-10 lg:top-28 lg:w-44">
-        <div className="rounded-[1.75rem] border border-cream/20 bg-charcoal/35 p-2 shadow-2xl backdrop-blur-sm">
+      <div className="absolute right-4 top-24 z-20 hidden w-24 sm:w-32 md:block md:w-36 lg:right-10 lg:top-28 lg:w-44">
+        <a
+          href="#about"
+          aria-label="Read Mame's story"
+          className="block rounded-[1.75rem] border border-cream/20 bg-charcoal/35 p-2 shadow-2xl backdrop-blur-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+        >
           <div className="overflow-hidden rounded-[1.25rem]">
             <img
               src={mamePortrait}
@@ -33,12 +37,16 @@ const HeroSection = () => {
               The heart behind every meatpie
             </p>
           </div>
-        </div>
+        </a>
       </div>
 
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 pb-16 pt-28 text-center sm:pb-20 md:pb-24 md:pt-20">
-        <div className="mx-auto mb-6 flex w-fit max-w-[11rem] flex-col rounded-[1.5rem] border border-cream/20 bg-charcoal/45 p-2 shadow-xl backdrop-blur-sm md:hidden">
+        <a
+          href="#about"
+          aria-label="Read Mame's story"
+          className="mx-auto mb-6 flex w-fit max-w-[11rem] flex-col rounded-[1.5rem] border border-cream/20 bg-charcoal/45 p-2 shadow-xl backdrop-blur-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold md:hidden"
+        >
           <div className="overflow-hidden rounded-[1.1rem]">
             <img
               src={mamePortrait}
@@ -54,7 +62,7 @@ const HeroSection = () => {
               The heart behind every meatpie
             </p>
           </div>
-        </div>
+        </a>
 
         <h1 className="mb-3 animate-fade-in-up font-serif text-4xl font-bold leading-tight text-cream sm:text-5xl md:mb-2 md:text-7xl" style={{ animationDelay: "0.15s" }}>
           Hand Crafted Meat Pies,
