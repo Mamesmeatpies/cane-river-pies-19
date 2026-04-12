@@ -3,11 +3,7 @@ import { ConvexProvider, ConvexReactClient } from "convex/react";
 import App from "./App.tsx";
 import "./index.css";
 
-const convexUrl = import.meta.env.VITE_CONVEX_URL;
-
-if (!convexUrl) {
-  throw new Error("Missing VITE_CONVEX_URL in .env.local");
-}
+const convexUrl = import.meta.env.VITE_CONVEX_URL ?? "https://adjoining-iguana-615.convex.cloud";
 
 const convex = new ConvexReactClient(convexUrl);
 
