@@ -2,7 +2,7 @@ import mameImg from "@/assets/mame-kitchen-2.jpg";
 
 const AboutSection = () => {
   return (
-    <section id="about" className="bg-background py-16 md:py-24">
+    <section id="about" className="scroll-mt-24 bg-background py-16 md:py-24">
       <div className="container mx-auto px-4">
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16">
           {/* Image */}
