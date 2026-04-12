@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { CreditCard, Minus, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
+import { CreditCard, Minus, Phone, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
@@ -201,9 +201,16 @@ const CartDrawer = () => {
                       <Send size={15} />
                       Send order by email
                     </button>
+                    <a
+                      href="tel:8003187135"
+                      className="mt-2 flex w-full items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      <Phone size={15} />
+                      Call 800-318-7135
+                    </a>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      Orders are currently handled by email for Houston, TX; Natchitoches, LA; Baton Rouge, LA;
-                      Little Rock, Arkansas; and surrounding areas.
+                      Orders are currently handled by email or phone for Houston, TX; Natchitoches, LA; Baton Rouge,
+                      LA; Little Rock, Arkansas; and surrounding areas.
                     </p>
                   </>
                 )}
@@ -263,7 +270,7 @@ const CartDrawer = () => {
               onClick={() => setShowCheckout(true)}
               className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg"
             >
-              Order by Email
+              Order by Email or Phone
             </button>
             <button
               onClick={clearCart}

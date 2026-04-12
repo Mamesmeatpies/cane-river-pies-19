@@ -135,8 +135,8 @@ const ShopSection = () => {
             Each meat pie is handcrafted using Mame's original Cane River recipe — premium ingredients, bold seasoning, and a golden flaky crust.
           </p>
           <p className="mx-auto mt-4 max-w-2xl text-sm font-medium text-foreground sm:text-base">
-            Orders are currently handled by email for Houston, TX; Natchitoches, LA; Baton Rouge, LA; Little Rock,
-            Arkansas; and surrounding areas.
+            Orders are currently handled by email or phone at 800-318-7135 for Houston, TX; Natchitoches, LA; Baton
+            Rouge, LA; Little Rock, Arkansas; and surrounding areas.
           </p>
         </div>
 
