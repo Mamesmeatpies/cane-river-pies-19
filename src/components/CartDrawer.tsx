@@ -1,18 +1,44 @@
 import { useState } from "react";
+import { useMutation } from "convex/react";
 import { CreditCard, Minus, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
 import { buildStripePaymentLink, hasStripePaymentLink } from "@/lib/stripePaymentLink";
+
+const STRIPE_CHECKOUT_ENABLED = false;
 
 const CartDrawer = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isOpen, setIsOpen } = useCart();
+  const createOrder = useMutation(api.orders.create);
   const [showCheckout, setShowCheckout] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const submitEmailOrder = () => {
+  const saveOrder = async (paymentMethod: "stripe" | "email") => {
+    await createOrder({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      notes: form.notes.trim() || undefined,
+      paymentMethod,
+      status: paymentMethod === "stripe" ? "checkout_started" : "submitted",
+      items: items.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        unitPrice: item.priceNum,
+        quantity: item.quantity,
+        lineTotal: item.priceNum * item.quantity,
+      })),
+      total: totalPrice,
+    });
+  };
+
+  const submitEmailOrder = async () => {
+    await saveOrder("email");
+
     const orderLines = items
       .map((i) => `${i.name} x${i.quantity} - $${(i.priceNum * i.quantity).toFixed(2)}`)
       .join("\n");
@@ -29,7 +55,12 @@ const CartDrawer = () => {
     setIsOpen(false);
   };
 
-  const submitStripeOrder = () => {
+  const submitStripeOrder = async () => {
+    if (!STRIPE_CHECKOUT_ENABLED) {
+      toast.error("Stripe checkout is currently paused. Please send your order by email.");
+      return false;
+    }
+
     const stripeUrl = buildStripePaymentLink({ email: form.email, items });
 
     if (!stripeUrl) {
@@ -37,12 +68,13 @@ const CartDrawer = () => {
       return false;
     }
 
+    await saveOrder("stripe");
     toast.success("Opening secure Stripe checkout.");
     window.location.href = stripeUrl;
     return true;
   };
 
-  const handleSubmit = (e: React.SyntheticEvent, paymentMethod: "stripe" | "email") => {
+  const handleSubmit = async (e: React.SyntheticEvent, paymentMethod: "stripe" | "email") => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error("Please fill in your name, email, and phone number.");
@@ -50,12 +82,17 @@ const CartDrawer = () => {
     }
     setSubmitting(true);
 
-    if (paymentMethod === "stripe") {
-      if (!submitStripeOrder()) {
+    try {
+      if (paymentMethod === "stripe") {
+        if (!(await submitStripeOrder())) {
+          setSubmitting(false);
+        }
+      } else {
+        await submitEmailOrder();
         setSubmitting(false);
       }
-    } else {
-      submitEmailOrder();
+    } catch {
+      toast.error("Could not save your order. Please try again.");
       setSubmitting(false);
     }
   };
@@ -86,7 +123,7 @@ const CartDrawer = () => {
               <p className="text-muted-foreground">Your cart is empty</p>
             </div>
           ) : showCheckout ? (
-            <form onSubmit={(e) => handleSubmit(e, "stripe")} className="space-y-4">
+            <form onSubmit={(e) => handleSubmit(e, STRIPE_CHECKOUT_ENABLED ? "stripe" : "email")} className="space-y-4">
               <h3 className="font-serif text-lg font-bold text-foreground mb-2">Contact Info</h3>
               <input
                 type="text"
@@ -129,28 +166,47 @@ const CartDrawer = () => {
                   <span>Total:</span>
                   <span className="text-cajun">${totalPrice.toFixed(2)}</span>
                 </div>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg disabled:opacity-50"
-                >
-                  <CreditCard size={16} />
-                  Pay with Stripe
-                </button>
-                {!hasStripePaymentLink() && (
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Add your sandbox Payment Link URL to VITE_STRIPE_PAYMENT_LINK_URL to turn on Stripe checkout.
-                  </p>
+                {STRIPE_CHECKOUT_ENABLED ? (
+                  <>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg disabled:opacity-50"
+                    >
+                      <CreditCard size={16} />
+                      Pay with Stripe
+                    </button>
+                    {!hasStripePaymentLink() && (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        Add your sandbox Payment Link URL to VITE_STRIPE_PAYMENT_LINK_URL to turn on Stripe checkout.
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleSubmit(e, "email")}
+                      disabled={submitting}
+                      className="w-full mt-2 flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    >
+                      <Send size={15} />
+                      Send order by email
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg disabled:opacity-50"
+                    >
+                      <Send size={15} />
+                      Send order by email
+                    </button>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Orders are currently handled by email for Houston, TX; Natchitoches, LA; Baton Rouge, LA;
+                      Little Rock, Arkansas; and surrounding areas.
+                    </p>
+                  </>
                 )}
-                <button
-                  type="button"
-                  onClick={(e) => handleSubmit(e, "email")}
-                  disabled={submitting}
-                  className="w-full mt-2 flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                >
-                  <Send size={15} />
-                  Send order by email
-                </button>
                 <button
                   type="button"
                   onClick={() => setShowCheckout(false)}
@@ -207,7 +263,7 @@ const CartDrawer = () => {
               onClick={() => setShowCheckout(true)}
               className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg"
             >
-              Proceed to Checkout
+              Order by Email
             </button>
             <button
               onClick={clearCart}

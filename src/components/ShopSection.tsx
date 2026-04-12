@@ -134,6 +134,10 @@ const ShopSection = () => {
           <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">
             Each meat pie is handcrafted using Mame's original Cane River recipe — premium ingredients, bold seasoning, and a golden flaky crust.
           </p>
+          <p className="mx-auto mt-4 max-w-2xl text-sm font-medium text-foreground sm:text-base">
+            Orders are currently handled by email for Houston, TX; Natchitoches, LA; Baton Rouge, LA; Little Rock,
+            Arkansas; and surrounding areas.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">

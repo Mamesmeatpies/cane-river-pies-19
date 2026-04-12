@@ -1,15 +1,37 @@
 import { useState } from "react";
+import { useMutation } from "convex/react";
 import { Phone, Mail, Send } from "lucide-react";
+import { api } from "../../convex/_generated/api";
 import { useToast } from "@/hooks/use-toast";
 
 const ContactSection = () => {
   const { toast } = useToast();
+  const createContactMessage = useMutation(api.contactMessages.create);
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ title: "Message Sent!", description: "We'll get back to you soon." });
-    setForm({ name: "", email: "", phone: "", message: "" });
+    setSubmitting(true);
+
+    try {
+      await createContactMessage({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || undefined,
+        message: form.message.trim(),
+      });
+      toast({ title: "Message Sent!", description: "We'll get back to you soon." });
+      setForm({ name: "", email: "", phone: "", message: "" });
+    } catch {
+      toast({
+        title: "Message not sent",
+        description: "Please try again or email us directly.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -100,10 +122,11 @@ const ContactSection = () => {
             />
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-4 rounded-full font-semibold text-lg transition-all hover:shadow-lg"
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-4 rounded-full font-semibold text-lg transition-all hover:shadow-lg disabled:opacity-50"
             >
               <Send size={18} />
-              Send Message
+              {submitting ? "Sending..." : "Send Message"}
             </button>
           </form>
         </div>

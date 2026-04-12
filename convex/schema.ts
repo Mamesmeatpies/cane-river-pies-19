@@ -1,0 +1,31 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  contactMessages: defineTable({
+    name: v.string(),
+    email: v.string(),
+    phone: v.optional(v.string()),
+    message: v.string(),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
+  orders: defineTable({
+    name: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    notes: v.optional(v.string()),
+    paymentMethod: v.union(v.literal("stripe"), v.literal("email")),
+    status: v.union(v.literal("checkout_started"), v.literal("submitted")),
+    items: v.array(
+      v.object({
+        productId: v.string(),
+        name: v.string(),
+        unitPrice: v.number(),
+        quantity: v.number(),
+        lineTotal: v.number(),
+      })
+    ),
+    total: v.number(),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
+});
