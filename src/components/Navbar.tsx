@@ -9,6 +9,7 @@ const navLinks = [
   { label: "Testimonials", href: "#testimonials" },
   { label: "Locations", href: "#locations" },
   { label: "Contact", href: "#contact" },
+  { label: "Admin", href: "/admin" },
 ];
 
 const Navbar = () => {
@@ -41,12 +42,6 @@ const Navbar = () => {
         </ul>
 
         <div className="hidden md:flex items-center gap-4">
-          <a
-            href="/admin"
-            className="border border-gold/40 px-4 py-2 text-sm font-semibold text-cream transition-colors hover:border-gold hover:text-gold"
-          >
-            Admin Login
-          </a>
           <button
             onClick={() => setIsOpen(true)}
             className="relative text-cream hover:text-gold transition-colors"
@@ -106,15 +101,6 @@ const Navbar = () => {
                 </a>
               </li>
             ))}
-            <li>
-              <a
-                href="/admin"
-                onClick={() => setOpen(false)}
-                className="block border border-gold/30 px-4 py-3 text-center text-sm font-semibold uppercase tracking-wider text-cream transition-colors hover:border-gold hover:text-gold"
-              >
-                Admin Login
-              </a>
-            </li>
             <li>
               <a
                 href="#shop"
