@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Inbox, Lock, Mail, MessageSquare, PackageCheck, Phone, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
@@ -75,6 +75,7 @@ type AdminInboxResult = {
 
 const workosClientId = import.meta.env.VITE_WORKOS_CLIENT_ID as string | undefined;
 const workosApiHostname = import.meta.env.VITE_WORKOS_API_HOSTNAME as string | undefined;
+const ADMIN_KEY_STORAGE = "mames-admin-key";
 
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
@@ -87,6 +88,14 @@ const formatCurrency = (value: number) =>
     style: "currency",
     currency: "USD",
   }).format(value);
+
+const getStoredAdminKey = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.localStorage.getItem(ADMIN_KEY_STORAGE) ?? "";
+};
 
 const AdminConfigurationMissing = () => (
   <main className="min-h-screen bg-background text-foreground">
@@ -125,13 +134,23 @@ const AdminPortal = () => {
   const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
+  const [fallbackInput, setFallbackInput] = useState(getStoredAdminKey);
+  const [fallbackKey, setFallbackKey] = useState(getStoredAdminKey);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const access = adminResult?.access;
-  const isLoading = authLoading || inboxLoading;
+  const passwordContactResult = useQuery(
+    api.contactMessages.listForAdmin,
+    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+  );
+  const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip");
+
+  const passwordAccess = passwordContactResult?.access ?? passwordOrderResult?.access;
+  const access = adminResult?.access ?? passwordAccess;
+  const isLoading = authLoading || inboxLoading || Boolean(fallbackKey && (!passwordContactResult || !passwordOrderResult));
   const isUnlocked = access === "granted";
+  const isUsingPassword = Boolean(fallbackKey);
 
   const loadInbox = useCallback(async () => {
     if (!user) {
@@ -158,8 +177,11 @@ const AdminPortal = () => {
   }, [loadInbox]);
 
   const inboxItems = useMemo<InboxItem[]>(() => {
+    const contactMessages = isUsingPassword ? passwordContactResult?.messages : adminResult?.messages;
+    const orderInquiries = isUsingPassword ? passwordOrderResult?.orders : adminResult?.orders;
+
     const messages =
-      adminResult?.messages.map((message: ContactMessage) => ({
+      contactMessages?.map((message: ContactMessage) => ({
         id: message._id,
         type: "message" as const,
         customerName: message.name,
@@ -171,7 +193,7 @@ const AdminPortal = () => {
       })) ?? [];
 
     const orders =
-      adminResult?.orders.map((order: Order) => ({
+      orderInquiries?.map((order: Order) => ({
         id: order._id,
         type: "order" as const,
         customerName: order.name,
@@ -187,7 +209,7 @@ const AdminPortal = () => {
       })) ?? [];
 
     return [...messages, ...orders].sort((a, b) => b.createdAt - a.createdAt);
-  }, [adminResult?.messages, adminResult?.orders]);
+  }, [adminResult?.messages, adminResult?.orders, isUsingPassword, passwordContactResult?.messages, passwordOrderResult?.orders]);
 
   const visibleItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -206,13 +228,32 @@ const AdminPortal = () => {
 
   const activeItem = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null;
 
-  const messageCount = adminResult?.messages.length ?? 0;
-  const orderCount = adminResult?.orders.length ?? 0;
+  const messageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
+  const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
+
+  const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedKey = fallbackInput.trim();
+
+    if (trimmedKey) {
+      window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmedKey);
+    }
+
+    setFallbackKey(trimmedKey);
+    setAdminResult(null);
+    setSelectedId(null);
+  };
 
   const handleSignOut = () => {
     setAdminResult(null);
+    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+    setFallbackInput("");
+    setFallbackKey("");
     setSelectedId(null);
-    signOut({ returnTo: window.location.origin });
+
+    if (user) {
+      signOut({ returnTo: window.location.origin });
+    }
   };
 
   return (
@@ -232,13 +273,13 @@ const AdminPortal = () => {
               Customer messages, order inquiries, and direct message follow-ups in one place.
             </p>
           </div>
-          {user && (
+          {(user || fallbackKey) && (
             <button
               type="button"
               onClick={handleSignOut}
               className="w-fit rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
             >
-              Sign out
+              {user ? "Sign out" : "Lock portal"}
             </button>
           )}
         </div>
@@ -250,7 +291,7 @@ const AdminPortal = () => {
             <p className="text-sm text-muted-foreground">Checking your WorkOS session...</p>
           </div>
         </section>
-      ) : !user ? (
+      ) : !user && !fallbackKey ? (
         <section className="container mx-auto px-4 py-12">
           <div className="mx-auto max-w-md space-y-5 border border-border bg-card p-6 shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-cajun/10 text-cajun">
@@ -269,6 +310,24 @@ const AdminPortal = () => {
             >
               Sign in with WorkOS
             </button>
+            <div className="border-t border-border pt-5">
+              <p className="mb-3 text-sm font-semibold text-foreground">WorkOS not ready?</p>
+              <form onSubmit={handlePasswordSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  value={fallbackInput}
+                  onChange={(event) => setFallbackInput(event.target.value)}
+                  placeholder="Admin password"
+                  className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                />
+                <button
+                  type="submit"
+                  className="w-full rounded-[8px] border border-border px-4 py-3 font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  Use admin password instead
+                </button>
+              </form>
+            </div>
           </div>
         </section>
       ) : (
@@ -283,13 +342,17 @@ const AdminPortal = () => {
           )}
           {access === "denied" && (
             <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>Your WorkOS account is not allowed to view this admin portal.</span>
+              <span>
+                {isUsingPassword
+                  ? "That admin password did not match. Try again with the current password."
+                  : "Your WorkOS account is not allowed to view this admin portal."}
+              </span>
               <button
                 type="button"
                 onClick={handleSignOut}
                 className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
               >
-                Sign out
+                {isUsingPassword ? "Enter password again" : "Sign out"}
               </button>
             </div>
           )}
