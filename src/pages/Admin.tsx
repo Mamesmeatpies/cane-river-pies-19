@@ -1,5 +1,6 @@
-import { FormEvent, useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
+import { useAction } from "convex/react";
 import { ArrowLeft, Inbox, Lock, Mail, MessageSquare, PackageCheck, Phone, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
@@ -60,7 +61,20 @@ type InboxItem =
 
 type Filter = "all" | "message" | "order" | "direct";
 
-const ADMIN_KEY_STORAGE = "mames-admin-key";
+type AdminInboxResult = {
+  access: "granted" | "denied" | "missing";
+  user: {
+    id: string;
+    email?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  messages: ContactMessage[];
+  orders: Order[];
+};
+
+const workosClientId = import.meta.env.VITE_WORKOS_CLIENT_ID as string | undefined;
+const workosApiHostname = import.meta.env.VITE_WORKOS_API_HOSTNAME as string | undefined;
 
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
@@ -74,34 +88,78 @@ const formatCurrency = (value: number) =>
     currency: "USD",
   }).format(value);
 
-const getStoredAdminKey = () => {
-  if (typeof window === "undefined") {
-    return "";
-  }
+const AdminConfigurationMissing = () => (
+  <main className="min-h-screen bg-background text-foreground">
+    <header className="border-b border-border bg-card">
+      <div className="container mx-auto px-4 py-6">
+        <Link
+          to="/"
+          className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-cajun"
+        >
+          <ArrowLeft size={16} />
+          Back to website
+        </Link>
+        <h1 className="font-serif text-3xl font-bold text-foreground md:text-5xl">Admin Portal</h1>
+      </div>
+    </header>
+    <section className="container mx-auto px-4 py-12">
+      <div className="mx-auto max-w-lg space-y-4 border border-destructive/30 bg-destructive/10 p-6">
+        <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-cajun/10 text-cajun">
+          <Lock size={22} />
+        </div>
+        <h2 className="font-serif text-2xl font-bold">WorkOS is not configured</h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Add <span className="font-semibold">VITE_WORKOS_CLIENT_ID</span> in Vercel, then add{" "}
+          <span className="font-semibold">WORKOS_CLIENT_ID</span>,{" "}
+          <span className="font-semibold">WORKOS_API_KEY</span>, and{" "}
+          <span className="font-semibold">WORKOS_ADMIN_EMAILS</span> in Convex.
+        </p>
+      </div>
+    </section>
+  </main>
+);
 
-  return window.localStorage.getItem(ADMIN_KEY_STORAGE) ?? "";
-};
-
-const Admin = () => {
-  const [keyInput, setKeyInput] = useState(getStoredAdminKey);
-  const [adminKey, setAdminKey] = useState(getStoredAdminKey);
+const AdminPortal = () => {
+  const { getAccessToken, isLoading: authLoading, signIn, signOut, user } = useAuth();
+  const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
+  const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const contactResult = useQuery(
-    api.contactMessages.listForAdmin,
-    adminKey ? { adminKey, limit: 100 } : "skip"
-  );
-  const orderResult = useQuery(api.orders.listForAdmin, adminKey ? { adminKey, limit: 100 } : "skip");
-
-  const access = contactResult?.access ?? orderResult?.access;
-  const isLoading = Boolean(adminKey) && (!contactResult || !orderResult);
+  const access = adminResult?.access;
+  const isLoading = authLoading || inboxLoading;
   const isUnlocked = access === "granted";
+
+  const loadInbox = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
+    setInboxLoading(true);
+    setInboxError(null);
+
+    try {
+      const accessToken = await getAccessToken();
+      const result = await getInboxForAdmin({ accessToken, limit: 100 });
+      setAdminResult(result as AdminInboxResult);
+    } catch {
+      setInboxError("Could not load the admin inbox. Please sign in again.");
+      setAdminResult(null);
+    } finally {
+      setInboxLoading(false);
+    }
+  }, [getAccessToken, getInboxForAdmin, user]);
+
+  useEffect(() => {
+    void loadInbox();
+  }, [loadInbox]);
 
   const inboxItems = useMemo<InboxItem[]>(() => {
     const messages =
-      contactResult?.messages.map((message: ContactMessage) => ({
+      adminResult?.messages.map((message: ContactMessage) => ({
         id: message._id,
         type: "message" as const,
         customerName: message.name,
@@ -113,7 +171,7 @@ const Admin = () => {
       })) ?? [];
 
     const orders =
-      orderResult?.orders.map((order: Order) => ({
+      adminResult?.orders.map((order: Order) => ({
         id: order._id,
         type: "order" as const,
         customerName: order.name,
@@ -129,7 +187,7 @@ const Admin = () => {
       })) ?? [];
 
     return [...messages, ...orders].sort((a, b) => b.createdAt - a.createdAt);
-  }, [contactResult?.messages, orderResult?.orders]);
+  }, [adminResult?.messages, adminResult?.orders]);
 
   const visibleItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -148,33 +206,13 @@ const Admin = () => {
 
   const activeItem = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null;
 
-  const messageCount = contactResult?.messages.length ?? 0;
-  const orderCount = orderResult?.orders.length ?? 0;
+  const messageCount = adminResult?.messages.length ?? 0;
+  const orderCount = adminResult?.orders.length ?? 0;
 
-  const handleUnlock = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedKey = keyInput.trim();
-
-    if (trimmedKey) {
-      window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmedKey);
-    }
-
-    setAdminKey(trimmedKey);
+  const handleSignOut = () => {
+    setAdminResult(null);
     setSelectedId(null);
-  };
-
-  const handleLock = () => {
-    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
-    setAdminKey("");
-    setKeyInput("");
-    setSelectedId(null);
-  };
-
-  const handleUseDifferentKey = () => {
-    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
-    setAdminKey("");
-    setKeyInput("");
-    setSelectedId(null);
+    signOut({ returnTo: window.location.origin });
   };
 
   return (
@@ -194,61 +232,76 @@ const Admin = () => {
               Customer messages, order inquiries, and direct message follow-ups in one place.
             </p>
           </div>
-          {adminKey && (
+          {user && (
             <button
               type="button"
-              onClick={handleLock}
+              onClick={handleSignOut}
               className="w-fit rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
             >
-              Lock portal
+              Sign out
             </button>
           )}
         </div>
       </header>
 
-      {!adminKey ? (
+      {authLoading ? (
         <section className="container mx-auto px-4 py-12">
-          <form onSubmit={handleUnlock} className="mx-auto max-w-md space-y-5 border border-border bg-card p-6 shadow-sm">
+          <div className="mx-auto max-w-md border border-border bg-card p-6 shadow-sm">
+            <p className="text-sm text-muted-foreground">Checking your WorkOS session...</p>
+          </div>
+        </section>
+      ) : !user ? (
+        <section className="container mx-auto px-4 py-12">
+          <div className="mx-auto max-w-md space-y-5 border border-border bg-card p-6 shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-cajun/10 text-cajun">
               <Lock size={22} />
             </div>
             <div>
-              <h2 className="font-serif text-2xl font-bold">Enter admin key</h2>
+              <h2 className="font-serif text-2xl font-bold">Admin sign in</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Use the private key configured in Convex as <span className="font-semibold">ADMIN_PORTAL_KEY</span>.
+                Sign in with your approved WorkOS account to view customer messages and inquiries.
               </p>
             </div>
-            <input
-              type="password"
-              value={keyInput}
-              onChange={(event) => setKeyInput(event.target.value)}
-              placeholder="Admin key"
-              className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
-            />
             <button
-              type="submit"
+              type="button"
+              onClick={() => signIn({ screenHint: "sign-in" })}
               className="w-full rounded-[8px] bg-cajun px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
             >
-              Open portal
+              Sign in with WorkOS
             </button>
-          </form>
+          </div>
         </section>
       ) : (
         <section className="container mx-auto px-4 py-8 md:py-10">
           {access === "missing" && (
             <div className="mb-6 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
-              Set <span className="font-semibold">ADMIN_PORTAL_KEY</span> in Convex before using the admin portal.
+              WorkOS admin access is not fully configured. Set{" "}
+              <span className="font-semibold">WORKOS_CLIENT_ID</span>,{" "}
+              <span className="font-semibold">WORKOS_API_KEY</span>, and{" "}
+              <span className="font-semibold">WORKOS_ADMIN_EMAILS</span> in Convex.
             </div>
           )}
           {access === "denied" && (
             <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>That admin key did not match. Enter the current admin password.</span>
+              <span>Your WorkOS account is not allowed to view this admin portal.</span>
               <button
                 type="button"
-                onClick={handleUseDifferentKey}
+                onClick={handleSignOut}
                 className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
               >
-                Enter new password
+                Sign out
+              </button>
+            </div>
+          )}
+          {inboxError && (
+            <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>{inboxError}</span>
+              <button
+                type="button"
+                onClick={() => void loadInbox()}
+                className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+              >
+                Try again
               </button>
             </div>
           )}
@@ -320,7 +373,7 @@ const Admin = () => {
                 {isLoading ? (
                   <p className="p-5 text-sm text-muted-foreground">Loading inbox...</p>
                 ) : !isUnlocked ? (
-                  <p className="p-5 text-sm text-muted-foreground">Unlock the portal to view messages.</p>
+                  <p className="p-5 text-sm text-muted-foreground">Sign in with an approved WorkOS account to view messages.</p>
                 ) : filter === "direct" ? (
                   <div className="p-5 text-sm leading-relaxed text-muted-foreground">
                     Direct social messages will appear here after an inbox integration is connected.
@@ -464,6 +517,25 @@ const Admin = () => {
         </section>
       )}
     </main>
+  );
+};
+
+const Admin = () => {
+  if (!workosClientId) {
+    return <AdminConfigurationMissing />;
+  }
+
+  return (
+    <AuthKitProvider
+      clientId={workosClientId}
+      apiHostname={workosApiHostname}
+      redirectUri={`${window.location.origin}/admin`}
+      onRefreshFailure={({ signIn }) => {
+        void signIn({ screenHint: "sign-in" });
+      }}
+    >
+      <AdminPortal />
+    </AuthKitProvider>
   );
 };
 

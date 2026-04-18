@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const getAdminAccess = (adminKey: string) => {
@@ -72,5 +72,20 @@ export const listForAdmin = query({
       access,
       orders,
     };
+  },
+});
+
+export const listLatestInternal = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
+
+    return await ctx.db
+      .query("orders")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(limit);
   },
 });
