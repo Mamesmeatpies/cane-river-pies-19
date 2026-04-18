@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { Phone, Mail, Send } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { useToast } from "@/hooks/use-toast";
 
 const ContactSection = () => {
   const { toast } = useToast();
-  const createContactMessage = useMutation(api.contactMessages.create);
+  const submitContactMessage = useAction(api.notifications.submitContactMessage);
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
 
@@ -15,7 +15,7 @@ const ContactSection = () => {
     setSubmitting(true);
 
     try {
-      await createContactMessage({
+      await submitContactMessage({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
