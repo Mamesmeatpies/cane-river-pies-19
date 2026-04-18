@@ -160,9 +160,17 @@ const Admin = () => {
     }
 
     setAdminKey(trimmedKey);
+    setSelectedId(null);
   };
 
   const handleLock = () => {
+    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+    setAdminKey("");
+    setKeyInput("");
+    setSelectedId(null);
+  };
+
+  const handleUseDifferentKey = () => {
     window.localStorage.removeItem(ADMIN_KEY_STORAGE);
     setAdminKey("");
     setKeyInput("");
@@ -233,8 +241,15 @@ const Admin = () => {
             </div>
           )}
           {access === "denied" && (
-            <div className="mb-6 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
-              That admin key did not match. Try again or update the saved key.
+            <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>That admin key did not match. Enter the current admin password.</span>
+              <button
+                type="button"
+                onClick={handleUseDifferentKey}
+                className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+              >
+                Enter new password
+              </button>
             </div>
           )}
 
