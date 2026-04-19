@@ -1,4 +1,4 @@
-import { MapPin, ExternalLink } from "lucide-react";
+import { MapPin } from "lucide-react";
 
 const locations = [
   {
@@ -57,16 +57,13 @@ const LocationsSection = () => {
             Ratcliff Premium Meats
           </h3>
           <p className="mx-auto mb-8 max-w-md text-sm text-cream/70 sm:text-base">
-            Shop premium cuts and quality meats from our trusted partner.
+            Find our pies at the Ratcliff Premium Meats booth inside Frisco Fresh Market.
           </p>
           <a
-            href="https://www.ratcliffpremiummeats.com/order-now-heres-the-beef/"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#contact"
             className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-center font-semibold text-charcoal transition-all hover:bg-gold-light hover:shadow-lg sm:px-8"
           >
-            Buy Premium Meats from Ratcliff Premium Meats
-            <ExternalLink size={16} />
+            Ask About Pickup
           </a>
         </div>
       </div>
