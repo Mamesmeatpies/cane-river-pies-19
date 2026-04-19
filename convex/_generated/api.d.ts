@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as analytics from "../analytics.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as directMessages from "../directMessages.js";
 import type * as newsletterSubscribers from "../newsletterSubscribers.js";
@@ -24,6 +25,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  analytics: typeof analytics;
   contactMessages: typeof contactMessages;
   directMessages: typeof directMessages;
   newsletterSubscribers: typeof newsletterSubscribers;

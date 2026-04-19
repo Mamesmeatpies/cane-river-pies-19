@@ -102,14 +102,16 @@ export const getInboxForAdmin = action({
           messages: [],
           directMessages: [],
           orders: [],
+          analytics: null,
         };
       }
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
-      const [messages, directMessages, orders] = await Promise.all([
+      const [messages, directMessages, orders, analytics] = await Promise.all([
         ctx.runQuery(internal.contactMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.directMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.orders.listLatestInternal, { limit }),
+        ctx.runQuery(internal.analytics.summaryInternal, {}),
       ]);
 
       return {
@@ -118,6 +120,7 @@ export const getInboxForAdmin = action({
         messages,
         directMessages,
         orders,
+        analytics,
       };
     } catch {
       return {
@@ -126,6 +129,7 @@ export const getInboxForAdmin = action({
         messages: [],
         directMessages: [],
         orders: [],
+        analytics: null,
       };
     }
   },

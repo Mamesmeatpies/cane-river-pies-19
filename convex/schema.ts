@@ -2,6 +2,27 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  analyticsEvents: defineTable({
+    route: v.string(),
+    host: v.string(),
+    referrer: v.optional(v.string()),
+    visitorKey: v.string(),
+    dailyVisitorKey: v.string(),
+    day: v.string(),
+    deviceType: v.union(
+      v.literal("desktop"),
+      v.literal("mobile"),
+      v.literal("tablet"),
+      v.literal("bot"),
+      v.literal("unknown")
+    ),
+    browser: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_day", ["day"])
+    .index("by_route", ["route"])
+    .index("by_visitor_route_createdAt", ["visitorKey", "route", "createdAt"]),
   contactMessages: defineTable({
     name: v.string(),
     email: v.string(),

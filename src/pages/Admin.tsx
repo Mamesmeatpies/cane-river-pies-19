@@ -9,6 +9,7 @@ import {
   CalendarDays,
   DollarSign,
   Download,
+  Eye,
   Inbox,
   LayoutDashboard,
   Lock,
@@ -179,6 +180,29 @@ type AdminInboxResult = {
   messages: ContactMessage[];
   directMessages: DirectMessage[];
   orders: Order[];
+  analytics: AnalyticsSummary | null;
+};
+
+type AnalyticsSummary = {
+  totalVisits: number;
+  uniqueVisitorsToday: number;
+  topPages: Array<{
+    route: string;
+    views: number;
+  }>;
+  sevenDayTrend: Array<{
+    day: string;
+    label: string;
+    visits: number;
+    uniqueVisitors: number;
+  }>;
+  recentActivity: Array<{
+    route: string;
+    referrer?: string;
+    deviceType: "desktop" | "mobile" | "tablet" | "bot" | "unknown";
+    browser?: string;
+    createdAt: number;
+  }>;
 };
 
 const workosClientId = import.meta.env.VITE_WORKOS_CLIENT_ID as string | undefined;
@@ -374,11 +398,18 @@ const AdminPortal = () => {
   );
   const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip");
   const productResult = useQuery(api.products.listForAdmin, fallbackKey ? { adminKey: fallbackKey } : "skip");
+  const passwordAnalyticsResult = useQuery(
+    api.analytics.summaryForAdmin,
+    fallbackKey ? { adminKey: fallbackKey } : "skip"
+  );
 
-  const passwordAccess = passwordContactResult?.access ?? passwordDirectResult?.access ?? passwordOrderResult?.access;
+  const passwordAccess =
+    passwordContactResult?.access ?? passwordDirectResult?.access ?? passwordOrderResult?.access ?? passwordAnalyticsResult?.access;
   const access = adminResult?.access ?? passwordAccess;
   const isLoading =
-    authLoading || inboxLoading || Boolean(fallbackKey && (!passwordContactResult || !passwordDirectResult || !passwordOrderResult));
+    authLoading ||
+    inboxLoading ||
+    Boolean(fallbackKey && (!passwordContactResult || !passwordDirectResult || !passwordOrderResult || !passwordAnalyticsResult));
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
 
@@ -803,6 +834,8 @@ const AdminPortal = () => {
   }, [orderItems, salesRange]);
   const latestActivityAt = inboxItems[0]?.createdAt;
   const currentUserLabel = user?.email ?? (isUsingPassword ? "Password access" : "Not signed in");
+  const analyticsSummary = (isUsingPassword ? passwordAnalyticsResult?.summary : adminResult?.analytics) ?? null;
+  const maxAnalyticsTrend = Math.max(...(analyticsSummary?.sevenDayTrend.map((bucket) => bucket.visits) ?? [0]), 1);
 
   const handleDownloadContacts = (contacts: CustomerContact[]) => {
     downloadCsv(
@@ -948,6 +981,108 @@ const AdminPortal = () => {
         </div>
       )}
     </>
+  );
+
+  const analyticsPanel = (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Total Visits</p>
+            <Eye className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked && analyticsSummary ? analyticsSummary.totalVisits : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Privacy-safe page views</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Unique Today</p>
+            <Users className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">
+            {isUnlocked && analyticsSummary ? analyticsSummary.uniqueVisitorsToday : "-"}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">Anonymous daily visitors</p>
+        </div>
+        <div className="border border-border bg-card p-5 md:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">7-Day Trend</p>
+            <BarChart3 className="text-cajun" size={20} />
+          </div>
+          <div className="mt-4 flex h-24 items-end gap-2">
+            {(analyticsSummary?.sevenDayTrend ?? []).map((bucket) => (
+              <div key={bucket.day} className="flex h-full flex-1 flex-col justify-end gap-2">
+                <div
+                  className="min-h-1 rounded-t-[8px] bg-cajun"
+                  style={{ height: `${Math.max((bucket.visits / maxAnalyticsTrend) * 100, bucket.visits > 0 ? 12 : 4)}%` }}
+                  title={`${bucket.label}: ${bucket.visits} visits`}
+                />
+                <p className="text-center text-xs font-semibold text-muted-foreground">{bucket.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="border border-border bg-card">
+          <div className="border-b border-border p-5">
+            <h2 className="font-serif text-2xl font-bold text-foreground">Top Pages</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Top routes from accepted page views.</p>
+          </div>
+          <div>
+            {!isUnlocked ? (
+              <p className="p-5 text-sm text-muted-foreground">Unlock the portal to view analytics.</p>
+            ) : !analyticsSummary || analyticsSummary.topPages.length === 0 ? (
+              <p className="p-5 text-sm text-muted-foreground">No page views tracked yet.</p>
+            ) : (
+              analyticsSummary.topPages.map((page, index) => (
+                <div key={page.route} className="flex items-center justify-between gap-3 border-b border-border p-4 last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-foreground">{page.route}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Rank #{index + 1}</p>
+                  </div>
+                  <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                    {page.views} view{page.views === 1 ? "" : "s"}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="border border-border bg-card">
+          <div className="border-b border-border p-5">
+            <h2 className="font-serif text-2xl font-bold text-foreground">Recent Activity</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Route, referrer, device, and browser without IP addresses.</p>
+          </div>
+          <div>
+            {!isUnlocked ? (
+              <p className="p-5 text-sm text-muted-foreground">Unlock the portal to view recent activity.</p>
+            ) : !analyticsSummary || analyticsSummary.recentActivity.length === 0 ? (
+              <p className="p-5 text-sm text-muted-foreground">No recent analytics activity yet.</p>
+            ) : (
+              analyticsSummary.recentActivity.map((activity) => (
+                <div key={`${activity.route}-${activity.createdAt}`} className="border-b border-border p-4 last:border-b-0">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-foreground">{activity.route}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {activity.referrer ? `Referrer: ${activity.referrer}` : "Direct or unavailable referrer"}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xs font-semibold text-muted-foreground">{formatDate(activity.createdAt)}</p>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold uppercase text-muted-foreground">
+                    {[activity.deviceType, activity.browser].filter(Boolean).join(" / ")}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   const dashboardOverviewPanel = (
@@ -2269,6 +2404,7 @@ const AdminPortal = () => {
     if (activePage === "reports") {
       return (
         <div className="space-y-6">
+          {analyticsPanel}
           {metricsPanel}
           {placeholderPanel("Reports", "High-level reports are ready for sales, customer, and message trends as more data comes in.")}
         </div>
@@ -2282,6 +2418,7 @@ const AdminPortal = () => {
 
     return (
       <div className="space-y-6">
+        {analyticsPanel}
         {dashboardOverviewPanel}
         {metricsPanel}
         {customerDatabasePanel}
