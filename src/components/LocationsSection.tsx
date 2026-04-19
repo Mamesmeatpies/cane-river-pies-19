@@ -60,7 +60,7 @@ const LocationsSection = () => {
             Shop premium cuts and quality meats from our trusted partner.
           </p>
           <a
-            href="https://www.ratcliffpremiummeats.com"
+            href="https://www.ratcliffpremiummeats.com/order-now-heres-the-beef/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-center font-semibold text-charcoal transition-all hover:bg-gold-light hover:shadow-lg sm:px-8"
