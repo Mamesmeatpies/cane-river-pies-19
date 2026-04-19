@@ -9,6 +9,15 @@ export default defineSchema({
     message: v.string(),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
+  newsletterSubscribers: defineTable({
+    email: v.string(),
+    source: v.string(),
+    status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_createdAt", ["createdAt"]),
   orders: defineTable({
     name: v.string(),
     email: v.string(),

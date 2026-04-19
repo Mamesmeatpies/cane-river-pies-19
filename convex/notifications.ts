@@ -90,6 +90,28 @@ export const submitContactMessage = action({
   },
 });
 
+export const submitNewsletterSignup = action({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.runMutation(api.newsletterSubscribers.subscribe, {
+      email: args.email,
+      source: "contact-section",
+    });
+
+    if (!result.alreadySubscribed) {
+      await sendResendEmail({
+        subject: "New Mame's email list signup",
+        replyTo: args.email,
+        text: ["New email list signup", `Email: ${args.email}`].join("\n"),
+      });
+    }
+
+    return result;
+  },
+});
+
 export const submitOrder = action({
   args: {
     name: v.string(),

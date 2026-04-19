@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useAction } from "convex/react";
-import { Phone, Mail, Send } from "lucide-react";
+import { Bell, Phone, Mail, Send } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { useToast } from "@/hooks/use-toast";
 
 const ContactSection = () => {
   const { toast } = useToast();
   const submitContactMessage = useAction(api.notifications.submitContactMessage);
+  const submitNewsletterSignup = useAction(api.notifications.submitNewsletterSignup);
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
+  const [newsletterEmail, setNewsletterEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +34,31 @@ const ContactSection = () => {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewsletterSubmitting(true);
+
+    try {
+      const result = await submitNewsletterSignup({
+        email: newsletterEmail.trim(),
+      });
+
+      toast({
+        title: result.alreadySubscribed ? "You're already on the list!" : "You're on the list!",
+        description: "We'll send Mame's updates, specials, and event news your way.",
+      });
+      setNewsletterEmail("");
+    } catch {
+      toast({
+        title: "Signup not saved",
+        description: "Please try again or email us directly.",
+        variant: "destructive",
+      });
+    } finally {
+      setNewsletterSubmitting(false);
     }
   };
 
@@ -80,6 +108,40 @@ const ContactSection = () => {
                 We're always looking for new retail locations, event opportunities, and wholesale partnerships. 
                 Let's bring Mame's to more tables together.
               </p>
+            </div>
+
+            <div className="rounded-lg border border-gold/40 bg-card p-6 shadow-sm sm:p-7">
+              <div className="mb-5 flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gold/15">
+                  <Bell className="text-cajun" size={20} />
+                </div>
+                <div>
+                  <span className="text-gold text-xs font-semibold uppercase tracking-widest">Be in the Know</span>
+                  <h3 className="mt-1 font-serif text-2xl font-bold text-foreground">Join our email list</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    Get first word on pop-ups, holiday ordering, new flavors, and local pickup dates.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleNewsletterSubmit} className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  required
+                  maxLength={255}
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:ring-2 focus:ring-cajun/50"
+                />
+                <button
+                  type="submit"
+                  disabled={newsletterSubmitting}
+                  className="rounded-lg bg-cajun px-5 py-3 font-semibold text-primary-foreground transition-all hover:bg-cajun-light hover:shadow-md disabled:opacity-50"
+                >
+                  {newsletterSubmitting ? "Joining..." : "Join"}
+                </button>
+              </form>
             </div>
           </div>
 
