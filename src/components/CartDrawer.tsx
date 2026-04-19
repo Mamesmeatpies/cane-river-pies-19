@@ -18,6 +18,18 @@ const CartDrawer = () => {
 
   if (!isOpen) return null;
 
+  const closeCart = () => {
+    setShowCheckout(false);
+    setIsOpen(false);
+  };
+
+  const backToProducts = () => {
+    closeCart();
+    window.setTimeout(() => {
+      document.getElementById("shop")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
   const saveOrder = async (paymentMethod: "stripe" | "email") => {
     await createOrder({
       name: form.name.trim(),
@@ -61,7 +73,7 @@ const CartDrawer = () => {
     clearCart();
     setShowCheckout(false);
     setForm({ name: "", email: "", phone: "", notes: "" });
-    setIsOpen(false);
+    closeCart();
   };
 
   const submitStripeOrder = async () => {
@@ -109,7 +121,7 @@ const CartDrawer = () => {
   return (
     <>
       {/* Overlay */}
-      <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setIsOpen(false)} />
+      <div className="fixed inset-0 bg-black/50 z-50" onClick={closeCart} />
 
       {/* Drawer */}
       <div className="fixed top-0 right-0 h-full w-full max-w-md bg-background z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
@@ -119,7 +131,11 @@ const CartDrawer = () => {
             <ShoppingCart size={20} className="text-cajun" />
             <h2 className="font-serif text-xl font-bold text-foreground">Your Cart ({totalItems})</h2>
           </div>
-          <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-muted rounded-full transition-colors">
+          <button
+            onClick={closeCart}
+            className="p-2 hover:bg-muted rounded-full transition-colors"
+            aria-label="Close cart"
+          >
             <X size={20} />
           </button>
         </div>
@@ -130,6 +146,13 @@ const CartDrawer = () => {
             <div className="text-center py-12">
               <ShoppingCart size={48} className="mx-auto text-muted-foreground/40 mb-4" />
               <p className="text-muted-foreground">Your cart is empty</p>
+              <button
+                type="button"
+                onClick={backToProducts}
+                className="mt-5 inline-flex items-center justify-center rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Back to Products
+              </button>
             </div>
           ) : showCheckout ? (
             <form onSubmit={(e) => handleSubmit(e, STRIPE_CHECKOUT_ENABLED ? "stripe" : "email")} className="space-y-4">
@@ -230,6 +253,13 @@ const CartDrawer = () => {
                 >
                   ← Back to Cart
                 </button>
+                <button
+                  type="button"
+                  onClick={backToProducts}
+                  className="w-full py-3 text-muted-foreground hover:text-foreground text-sm transition-colors"
+                >
+                  Back to Products
+                </button>
               </div>
             </form>
           ) : (
@@ -280,6 +310,12 @@ const CartDrawer = () => {
               className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg"
             >
               Order by Email or Phone
+            </button>
+            <button
+              onClick={backToProducts}
+              className="w-full flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              Back to Products
             </button>
             <button
               onClick={clearCart}
