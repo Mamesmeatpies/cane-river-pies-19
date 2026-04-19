@@ -111,6 +111,20 @@ type CustomerContact = {
   totalInquiries: number;
 };
 
+type CustomerProfile = CustomerContact & {
+  orderCount: number;
+  lifetimeValue: number;
+  lastOrderAt?: number;
+  orders: Extract<InboxItem, { type: "order" }>[];
+  messages: Extract<InboxItem, { type: "message" }>[];
+  notes: {
+    vip: string;
+    issues: string;
+    preferences: string;
+  };
+  tags: string[];
+};
+
 type AdminProduct = {
   _id?: Id<"products">;
   productId: string;
@@ -290,6 +304,7 @@ const AdminPortal = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
   const [salesRange, setSalesRange] = useState<SalesRange>("daily");
+  const [selectedCustomerKey, setSelectedCustomerKey] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<AdminProduct>(emptyProductForm);
   const [productSaving, setProductSaving] = useState(false);
@@ -434,6 +449,106 @@ const AdminPortal = () => {
     return Array.from(contactsByKey.values()).sort((a, b) => b.lastContactAt - a.lastContactAt);
   }, [inboxItems]);
 
+  const customerProfiles = useMemo<CustomerProfile[]>(() => {
+    const profilesByKey = new Map<string, CustomerProfile>();
+
+    inboxItems.forEach((item) => {
+      const emailKey = item.email.trim().toLowerCase();
+      const phoneKey = (item.phone ?? "").replace(/\D/g, "");
+      const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
+      const source = item.type === "message" ? "Message" : "Inquiry";
+      const existing = profilesByKey.get(key);
+      const profile =
+        existing ??
+        ({
+          key,
+          name: item.customerName,
+          email: item.email,
+          phone: item.phone ?? "",
+          sources: [],
+          lastContactAt: item.createdAt,
+          totalMessages: 0,
+          totalInquiries: 0,
+          orderCount: 0,
+          lifetimeValue: 0,
+          orders: [],
+          messages: [],
+          notes: {
+            vip: "",
+            issues: "",
+            preferences: "",
+          },
+          tags: [],
+        } satisfies CustomerProfile);
+
+      if (!profile.sources.includes(source)) {
+        profile.sources.push(source);
+      }
+
+      if (item.createdAt >= profile.lastContactAt) {
+        profile.name = item.customerName || profile.name;
+        profile.email = item.email || profile.email;
+      }
+
+      profile.lastContactAt = Math.max(profile.lastContactAt, item.createdAt);
+      profile.phone = profile.phone || item.phone || "";
+
+      if (item.type === "order") {
+        profile.totalInquiries += 1;
+        profile.orderCount += 1;
+        profile.lifetimeValue += item.total;
+        profile.lastOrderAt = Math.max(profile.lastOrderAt ?? 0, item.createdAt);
+        profile.orders.push(item);
+      } else {
+        profile.totalMessages += 1;
+        profile.messages.push(item);
+      }
+
+      profilesByKey.set(key, profile);
+    });
+
+    return Array.from(profilesByKey.values())
+      .map((profile) => {
+        const orderNotes = profile.orders.map((order) => order.notes).filter(Boolean) as string[];
+        const messageNotes = profile.messages.map((message) => message.body).filter(Boolean);
+        const combinedNotes = [...orderNotes, ...messageNotes].join(" ").toLowerCase();
+        const tags = new Set<string>();
+
+        if (profile.lifetimeValue >= 200 || profile.orderCount >= 3) {
+          tags.add("VIP");
+        }
+
+        if (/\b(wholesale|bulk|restaurant|resale)\b/.test(combinedNotes)) {
+          tags.add("Wholesale");
+        }
+
+        if (/\b(event|wedding|festival|party|catering|corporate)\b/.test(combinedNotes)) {
+          tags.add("Event Buyer");
+        }
+
+        return {
+          ...profile,
+          orders: profile.orders.sort((a, b) => b.createdAt - a.createdAt),
+          messages: profile.messages.sort((a, b) => b.createdAt - a.createdAt),
+          notes: {
+            vip:
+              profile.lifetimeValue >= 200
+                ? `${formatCurrency(profile.lifetimeValue)} lifetime value across ${profile.orderCount} order${profile.orderCount === 1 ? "" : "s"}.`
+                : profile.orderCount > 0
+                  ? `${profile.orderCount} order${profile.orderCount === 1 ? "" : "s"} so far.`
+                  : "No orders yet.",
+            issues:
+              /\b(issue|problem|late|refund|missing|wrong|cancel)\b/.test(combinedNotes)
+                ? "Review recent notes for possible service follow-up."
+                : "No issues flagged.",
+            preferences: orderNotes.length > 0 ? orderNotes.slice(0, 2).join(" ") : "No preferences recorded yet.",
+          },
+          tags: Array.from(tags),
+        };
+      })
+      .sort((a, b) => (b.lastOrderAt ?? b.lastContactAt) - (a.lastOrderAt ?? a.lastContactAt));
+  }, [inboxItems]);
+
   const visibleContacts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -448,6 +563,22 @@ const AdminPortal = () => {
     );
   }, [customerContacts, search]);
 
+  const visibleCustomerProfiles = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return customerProfiles;
+    }
+
+    return customerProfiles.filter((profile) =>
+      [profile.name, profile.email, profile.phone, profile.tags.join(" "), profile.sources.join(" ")]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch))
+    );
+  }, [customerProfiles, search]);
+
+  const selectedCustomer = visibleCustomerProfiles.find((profile) => profile.key === selectedCustomerKey) ?? null;
+
   const messageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
   const contactCount = customerContacts.length;
@@ -458,7 +589,7 @@ const AdminPortal = () => {
   const todayRevenue = todayOrderItems.reduce((sum, item) => sum + item.total, 0);
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
   const recentOrders = orderItems.slice(0, 5);
-  const adminProductRows = (productResult?.products ?? []) as AdminProduct[];
+  const adminProductRows = useMemo(() => (productResult?.products ?? []) as AdminProduct[], [productResult?.products]);
   const lowStockProducts = adminProductRows.filter(
     (product) => product.status === "low_stock" || product.stock <= (product.inventoryThreshold ?? 10)
   );
@@ -989,6 +1120,226 @@ const AdminPortal = () => {
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+
+  const customerDirectoryPanel = (
+    <div className="space-y-6">
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-foreground">Search Customers</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Find customers by name, email, phone, source, or tag.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleDownloadContacts(visibleCustomerProfiles)}
+            disabled={!isUnlocked || visibleCustomerProfiles.length === 0}
+            className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download size={15} />
+            Download shown
+          </button>
+        </div>
+        <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2">
+          <Search size={16} className="text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setSelectedCustomerKey(null);
+            }}
+            placeholder="Search customers"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <div className="overflow-x-auto border border-border bg-card">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3">Name</th>
+                <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Orders</th>
+                <th className="px-5 py-3">Lifetime Value</th>
+                <th className="px-5 py-3">Last Order</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                    Loading customers...
+                  </td>
+                </tr>
+              ) : !isUnlocked ? (
+                <tr>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                    Unlock the portal to review customers.
+                  </td>
+                </tr>
+              ) : visibleCustomerProfiles.length === 0 ? (
+                <tr>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                    No customers match that search.
+                  </td>
+                </tr>
+              ) : (
+                visibleCustomerProfiles.map((profile) => (
+                  <tr
+                    key={profile.key}
+                    className={`border-b border-border last:border-b-0 ${selectedCustomerKey === profile.key ? "bg-muted" : ""}`}
+                  >
+                    <td className="px-5 py-4">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCustomerKey(profile.key)}
+                        className="text-left font-semibold text-foreground transition-colors hover:text-cajun"
+                      >
+                        {profile.name}
+                      </button>
+                    </td>
+                    <td className="px-5 py-4">
+                      <a className="break-words text-cajun hover:underline" href={`mailto:${profile.email}`}>
+                        {profile.email}
+                      </a>
+                    </td>
+                    <td className="px-5 py-4 font-semibold text-foreground">{profile.orderCount}</td>
+                    <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(profile.lifetimeValue)}</td>
+                    <td className="px-5 py-4 text-muted-foreground">
+                      {profile.lastOrderAt ? formatDate(profile.lastOrderAt) : "No orders yet"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <article className="min-h-[520px] border border-border bg-card p-5">
+          {!selectedCustomer ? (
+            <div className="flex min-h-[420px] items-center justify-center text-center">
+              <div>
+                <Users className="mx-auto mb-3 text-muted-foreground" size={36} />
+                <p className="font-semibold text-foreground">No customer selected</p>
+                <p className="mt-1 text-sm text-muted-foreground">Click a customer to open their profile.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="border-b border-border pb-5">
+                <p className="text-xs font-bold uppercase text-muted-foreground">Customer Profile</p>
+                <h3 className="mt-2 font-serif text-3xl font-bold text-foreground">{selectedCustomer.name}</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(selectedCustomer.tags.length > 0 ? selectedCustomer.tags : ["New Customer"]).map((tag) => (
+                    <span key={tag} className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <section>
+                <h4 className="font-serif text-xl font-bold text-foreground">Contact Info</h4>
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-muted-foreground">Email</dt>
+                    <dd className="mt-1 break-words">
+                      <a className="text-cajun hover:underline" href={`mailto:${selectedCustomer.email}`}>
+                        {selectedCustomer.email}
+                      </a>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-muted-foreground">Phone</dt>
+                    <dd className="mt-1 text-foreground">
+                      {selectedCustomer.phone ? (
+                        <a className="hover:underline" href={`tel:${selectedCustomer.phone}`}>
+                          {selectedCustomer.phone}
+                        </a>
+                      ) : (
+                        "Not provided"
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-muted-foreground">Source</dt>
+                    <dd className="mt-1 text-foreground">{selectedCustomer.sources.join(" + ")}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section>
+                <h4 className="font-serif text-xl font-bold text-foreground">Order History</h4>
+                <div className="mt-3 overflow-hidden border border-border">
+                  {selectedCustomer.orders.length === 0 ? (
+                    <p className="p-3 text-sm text-muted-foreground">No orders recorded yet.</p>
+                  ) : (
+                    selectedCustomer.orders.map((order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        onClick={() => {
+                          setActivePage("orders");
+                          setSelectedId(order.id);
+                        }}
+                        className="grid w-full gap-2 border-b border-border p-3 text-left text-sm transition-colors last:border-b-0 hover:bg-muted md:grid-cols-[1fr_auto]"
+                      >
+                        <span>
+                          <span className="font-semibold text-foreground">{order.items.length} item{order.items.length === 1 ? "" : "s"}</span>
+                          <span className="mt-1 block text-xs text-muted-foreground">{formatDate(order.createdAt)}</span>
+                        </span>
+                        <span className="font-semibold text-foreground">{formatCurrency(order.total)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="font-serif text-xl font-bold text-foreground">Notes</h4>
+                <div className="mt-3 grid gap-3 text-sm">
+                  <div className="border border-border bg-background p-3">
+                    <p className="text-xs font-bold uppercase text-muted-foreground">VIP</p>
+                    <p className="mt-1 text-foreground">{selectedCustomer.notes.vip}</p>
+                  </div>
+                  <div className="border border-border bg-background p-3">
+                    <p className="text-xs font-bold uppercase text-muted-foreground">Issues</p>
+                    <p className="mt-1 text-foreground">{selectedCustomer.notes.issues}</p>
+                  </div>
+                  <div className="border border-border bg-background p-3">
+                    <p className="text-xs font-bold uppercase text-muted-foreground">Preferences</p>
+                    <p className="mt-1 text-foreground">{selectedCustomer.notes.preferences}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="font-serif text-xl font-bold text-foreground">Tags</h4>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {["VIP", "Wholesale", "Event Buyer"].map((tag) => (
+                    <span
+                      key={tag}
+                      className={`rounded-[8px] border px-3 py-2 text-xs font-bold uppercase ${
+                        selectedCustomer.tags.includes(tag)
+                          ? "border-cajun bg-cajun text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground"
+                      }`}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </article>
       </div>
     </div>
   );
@@ -1647,7 +1998,7 @@ const AdminPortal = () => {
     }
 
     if (activePage === "customers") {
-      return customerDatabasePanel;
+      return customerDirectoryPanel;
     }
 
     if (activePage === "reports") {
