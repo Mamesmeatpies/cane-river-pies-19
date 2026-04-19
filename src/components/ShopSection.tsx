@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "convex/react";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
 // @ts-ignore
 import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
@@ -19,7 +21,14 @@ interface Product {
   priceNum: number;
 }
 
-const products: Product[] = [
+const productImages: Record<string, string> = {
+  "beef-pork": beefPorkImg,
+  spicy: spicyImg,
+  turkey: turkeyImg,
+  mini: miniImg,
+};
+
+const fallbackProducts: Product[] = [
   {
     id: "beef-pork",
     name: "Beef & Pork Meat Pie",
@@ -57,6 +66,11 @@ const products: Product[] = [
     priceNum: 20,
   },
 ];
+
+const formatProductPrice = (price: number, category: string) => {
+  const unit = category.toLowerCase().includes("mini") ? "dozen" : "dozen";
+  return `$${price} / ${unit}`;
+};
 
 const ProductCard = ({ product }: { product: Product }) => {
   const [qty, setQty] = useState(1);
@@ -123,6 +137,20 @@ const ProductCard = ({ product }: { product: Product }) => {
 };
 
 const ShopSection = () => {
+  const liveProducts = useQuery(api.products.listActive);
+  const products =
+    liveProducts && liveProducts.length > 0
+      ? liveProducts.map((product) => ({
+          id: product.productId,
+          name: product.name,
+          description: product.description,
+          image: productImages[product.imageKey] ?? productImages["beef-pork"],
+          category: product.category,
+          price: formatProductPrice(product.price, product.category),
+          priceNum: product.price,
+        }))
+      : fallbackProducts;
+
   return (
     <section id="shop" className="bg-cream-dark py-16 md:py-24">
       <div className="container mx-auto px-4">

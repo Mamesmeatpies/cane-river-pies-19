@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 type ContactMessage = {
   _id: string;
@@ -110,12 +111,16 @@ type CustomerContact = {
 };
 
 type AdminProduct = {
-  id: string;
+  _id?: Id<"products">;
+  productId: string;
   name: string;
   sku: string;
+  description: string;
+  category: string;
   price: number;
   stock: number;
   status: ProductStatus;
+  imageKey: string;
 };
 
 type AdminInboxResult = {
@@ -147,40 +152,17 @@ const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDa
 ];
 
 const topNavItems = adminNavItems.slice(0, 5);
-const adminProducts: AdminProduct[] = [
-  {
-    id: "beef-pork",
-    name: "Beef & Pork Meat Pie",
-    sku: "MAME-BP-DOZ",
-    price: 30,
-    stock: 48,
-    status: "active",
-  },
-  {
-    id: "spicy",
-    name: "Beef & Pork Spicy",
-    sku: "MAME-SP-DOZ",
-    price: 30,
-    stock: 22,
-    status: "active",
-  },
-  {
-    id: "turkey",
-    name: "Turkey Meat Pie",
-    sku: "MAME-TK-DOZ",
-    price: 30,
-    stock: 16,
-    status: "active",
-  },
-  {
-    id: "mini",
-    name: "Mini Beef & Pork Pies",
-    sku: "MAME-MINI-12",
-    price: 20,
-    stock: 8,
-    status: "low_stock",
-  },
-];
+const emptyProductForm: AdminProduct = {
+  productId: "",
+  name: "",
+  sku: "",
+  description: "",
+  category: "Full Size",
+  price: 0,
+  stock: 0,
+  status: "draft",
+  imageKey: "beef-pork",
+};
 
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
@@ -263,6 +245,8 @@ const AdminConfigurationMissing = () => (
 const AdminPortal = () => {
   const { getAccessToken, isLoading: authLoading, signIn, signOut, user } = useAuth();
   const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
+  const createProduct = useMutation(api.products.createForAdmin);
+  const updateProduct = useMutation(api.products.updateForAdmin);
   const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -274,12 +258,16 @@ const AdminPortal = () => {
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
   const [salesRange, setSalesRange] = useState<SalesRange>("daily");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productForm, setProductForm] = useState<AdminProduct>(emptyProductForm);
+  const [productSaving, setProductSaving] = useState(false);
+  const [productNotice, setProductNotice] = useState<string | null>(null);
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
     fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip"
   );
   const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip");
+  const productResult = useQuery(api.products.listForAdmin, fallbackKey ? { adminKey: fallbackKey } : "skip");
 
   const passwordAccess = passwordContactResult?.access ?? passwordOrderResult?.access;
   const access = adminResult?.access ?? passwordAccess;
@@ -310,6 +298,12 @@ const AdminPortal = () => {
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    const selectedProduct = productResult?.products.find((product: AdminProduct) => product._id === selectedProductId);
+
+    setProductForm(selectedProduct ?? emptyProductForm);
+  }, [productResult?.products, selectedProductId]);
 
   const inboxItems = useMemo<InboxItem[]>(() => {
     const contactMessages = isUsingPassword ? passwordContactResult?.messages : adminResult?.messages;
@@ -430,24 +424,28 @@ const AdminPortal = () => {
   const todayOrderItems = orderItems.filter((item) => item.createdAt >= todayStart.getTime());
   const todayRevenue = todayOrderItems.reduce((sum, item) => sum + item.total, 0);
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
-  const lowStockAlerts = 0;
   const recentOrders = orderItems.slice(0, 5);
+  const adminProductRows = (productResult?.products ?? []) as AdminProduct[];
+  const lowStockAlerts = adminProductRows.filter((product) => product.status === "low_stock" || product.stock <= 10).length;
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     if (!normalizedSearch) {
-      return adminProducts;
+      return adminProductRows;
     }
 
-    return adminProducts.filter((product) =>
+    return adminProductRows.filter((product) =>
       [product.name, product.sku, product.status].some((value) => value.toLowerCase().includes(normalizedSearch))
     );
-  }, [search]);
-  const selectedProduct = adminProducts.find((product) => product.id === selectedProductId);
+  }, [adminProductRows, search]);
+  const selectedProduct = adminProductRows.find((product) => product._id === selectedProductId);
   const dashboardAlerts = [
     {
       title: "Low inventory: Meat Pies",
-      detail: "Connect inventory counts to make this alert live.",
+      detail:
+        lowStockAlerts > 0
+          ? `${lowStockAlerts} product${lowStockAlerts === 1 ? "" : "s"} need inventory attention.`
+          : "Inventory counts are healthy.",
     },
     {
       title: "Failed payment alert",
@@ -528,6 +526,67 @@ const AdminPortal = () => {
         "Last Contact": formatDate(contact.lastContactAt),
       }))
     );
+  };
+
+  const updateProductForm = (field: keyof AdminProduct, value: string | number) => {
+    setProductForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProductNotice(null);
+
+    if (!fallbackKey) {
+      setProductNotice("Unlock with the admin password before saving products.");
+      return;
+    }
+
+    const productPayload = {
+      productId: productForm.productId.trim(),
+      name: productForm.name.trim(),
+      sku: productForm.sku.trim(),
+      description: productForm.description.trim(),
+      category: productForm.category.trim(),
+      price: Number(productForm.price),
+      stock: Number(productForm.stock),
+      status: productForm.status,
+      imageKey: productForm.imageKey.trim(),
+    };
+
+    if (!productPayload.productId || !productPayload.name || !productPayload.sku) {
+      setProductNotice("Product ID, name, and SKU are required.");
+      return;
+    }
+
+    setProductSaving(true);
+
+    try {
+      if (selectedProduct?._id) {
+        const result = await updateProduct({
+          adminKey: fallbackKey,
+          id: selectedProduct._id,
+          product: productPayload,
+        });
+        setProductNotice(result.access === "granted" ? "Product updated." : "That admin password did not match.");
+      } else {
+        const result = await createProduct({
+          adminKey: fallbackKey,
+          product: productPayload,
+        });
+        setProductNotice(result.access === "granted" ? "Product added." : "That admin password did not match.");
+        if (result.access === "granted") {
+          setSelectedProductId(null);
+          setProductForm(emptyProductForm);
+        }
+      }
+    } catch (error) {
+      setProductNotice(error instanceof Error ? error.message : "Product could not be saved.");
+    } finally {
+      setProductSaving(false);
+    }
   };
 
   const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1140,7 +1199,11 @@ const AdminPortal = () => {
         </div>
         <button
           type="button"
-          onClick={() => setSelectedProductId(null)}
+          onClick={() => {
+            setSelectedProductId(null);
+            setProductForm(emptyProductForm);
+            setProductNotice(null);
+          }}
           className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
         >
           <Plus size={15} />
@@ -1164,7 +1227,19 @@ const AdminPortal = () => {
             </tr>
           </thead>
           <tbody>
-            {visibleProducts.length === 0 ? (
+            {!fallbackKey ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  Unlock with the admin password to manage products.
+                </td>
+              </tr>
+            ) : productResult === undefined ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  Loading products...
+                </td>
+              </tr>
+            ) : visibleProducts.length === 0 ? (
               <tr>
                 <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
                   No products match that search.
@@ -1172,7 +1247,7 @@ const AdminPortal = () => {
               </tr>
             ) : (
               visibleProducts.map((product) => (
-                <tr key={product.id} className="border-b border-border last:border-b-0">
+                <tr key={product._id ?? product.productId} className="border-b border-border last:border-b-0">
                   <td className="px-5 py-4 font-semibold text-foreground">{product.name}</td>
                   <td className="px-5 py-4 text-muted-foreground">{product.sku}</td>
                   <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(product.price)}</td>
@@ -1193,7 +1268,10 @@ const AdminPortal = () => {
                   <td className="px-5 py-4">
                     <button
                       type="button"
-                      onClick={() => setSelectedProductId(product.id)}
+                      onClick={() => {
+                        setSelectedProductId(product._id ?? null);
+                        setProductNotice(null);
+                      }}
                       className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
                     >
                       <Pencil size={14} />
@@ -1207,12 +1285,124 @@ const AdminPortal = () => {
         </table>
       </div>
 
-      <div className="border border-border bg-card p-5">
+      <form onSubmit={handleProductSubmit} className="border border-border bg-card p-5">
         <h3 className="font-serif text-xl font-bold text-foreground">{selectedProduct ? `Editing ${selectedProduct.name}` : "Add Product"}</h3>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Product editing controls are ready for the database step. For now, the table reflects the current storefront catalog.
-        </p>
-      </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Product ID
+            <input
+              value={productForm.productId}
+              onChange={(event) => updateProductForm("productId", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="beef-pork"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Name
+            <input
+              value={productForm.name}
+              onChange={(event) => updateProductForm("name", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Beef & Pork Meat Pie"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            SKU
+            <input
+              value={productForm.sku}
+              onChange={(event) => updateProductForm("sku", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="MAME-BP-DOZ"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Category
+            <input
+              value={productForm.category}
+              onChange={(event) => updateProductForm("category", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Full Size"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Price
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={productForm.price}
+              onChange={(event) => updateProductForm("price", Number(event.target.value))}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Stock
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={productForm.stock}
+              onChange={(event) => updateProductForm("stock", Number(event.target.value))}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Status
+            <select
+              value={productForm.status}
+              onChange={(event) => updateProductForm("status", event.target.value as ProductStatus)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            >
+              <option value="active">Active</option>
+              <option value="low_stock">Low Stock</option>
+              <option value="draft">Draft</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Image
+            <select
+              value={productForm.imageKey}
+              onChange={(event) => updateProductForm("imageKey", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            >
+              <option value="beef-pork">Beef & Pork</option>
+              <option value="spicy">Spicy</option>
+              <option value="turkey">Turkey</option>
+              <option value="mini">Mini Pies</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground md:col-span-2">
+            Description
+            <textarea
+              value={productForm.description}
+              onChange={(event) => updateProductForm("description", event.target.value)}
+              className="min-h-24 rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Product description"
+            />
+          </label>
+        </div>
+        {productNotice && <p className="mt-4 text-sm font-semibold text-cajun">{productNotice}</p>}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={productSaving || !fallbackKey}
+            className="rounded-[8px] bg-cajun px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {productSaving ? "Saving..." : selectedProduct ? "Save Product" : "Create Product"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedProductId(null);
+              setProductForm(emptyProductForm);
+              setProductNotice(null);
+            }}
+            className="rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            Clear
+          </button>
+        </div>
+      </form>
     </div>
   );
 
