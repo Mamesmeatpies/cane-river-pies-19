@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Component, ReactNode, useState } from "react";
 import { useQuery } from "convex/react";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -136,7 +136,27 @@ const ProductCard = ({ product }: { product: Product }) => {
   );
 };
 
-const ShopSection = () => {
+class ProductQueryBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
+const ProductGrid = ({ products }: { products: Product[] }) => (
+  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+    {products.map((product) => (
+      <ProductCard key={product.id} product={product} />
+    ))}
+  </div>
+);
+
+const LiveProductGrid = () => {
   const liveProducts = useQuery(api.products.listActive);
   const products =
     liveProducts && liveProducts.length > 0
@@ -151,6 +171,10 @@ const ShopSection = () => {
         }))
       : fallbackProducts;
 
+  return <ProductGrid products={products} />;
+};
+
+const ShopSection = () => {
   return (
     <section id="shop" className="bg-cream-dark py-16 md:py-24">
       <div className="container mx-auto px-4">
@@ -168,11 +192,9 @@ const ShopSection = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        <ProductQueryBoundary fallback={<ProductGrid products={fallbackProducts} />}>
+          <LiveProductGrid />
+        </ProductQueryBoundary>
       </div>
     </section>
   );
