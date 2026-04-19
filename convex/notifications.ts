@@ -139,10 +139,13 @@ export const submitDirectMessage = action({
 
 export const submitNewsletterSignup = action({
   args: {
+    name: v.optional(v.string()),
     email: v.string(),
   },
   handler: async (ctx, args) => {
+    const name = args.name?.trim();
     const result = await ctx.runMutation(api.newsletterSubscribers.subscribe, {
+      ...(name ? { name } : {}),
       email: args.email,
       source: "contact-section",
     });
@@ -152,7 +155,7 @@ export const submitNewsletterSignup = action({
       : await trySendResendEmail({
           subject: "New Mame's email list signup",
           replyTo: args.email,
-          text: [`New email list signup`, `Email: ${args.email}`].join("\n"),
+          text: [`New email list signup`, `Name: ${name || "Not provided"}`, `Email: ${args.email}`].join("\n"),
         });
 
     return { ...result, notificationSent };

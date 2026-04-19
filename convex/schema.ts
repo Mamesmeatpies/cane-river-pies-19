@@ -19,6 +19,7 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
   newsletterSubscribers: defineTable({
+    name: v.optional(v.string()),
     email: v.string(),
     source: v.string(),
     status: v.union(v.literal("subscribed"), v.literal("unsubscribed")),

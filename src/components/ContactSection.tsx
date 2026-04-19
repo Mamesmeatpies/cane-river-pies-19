@@ -9,6 +9,7 @@ const ContactSection = () => {
   const submitContactMessage = useAction(api.notifications.submitContactMessage);
   const submitNewsletterSignup = useAction(api.notifications.submitNewsletterSignup);
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
+  const [newsletterName, setNewsletterName] = useState("");
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
@@ -46,6 +47,7 @@ const ContactSection = () => {
 
     try {
       const result = await submitNewsletterSignup({
+        name: newsletterName.trim(),
         email: newsletterEmail.trim(),
       });
 
@@ -53,6 +55,7 @@ const ContactSection = () => {
         title: result.alreadySubscribed ? "You're already on the list!" : "You're on the list!",
         description: "We'll send Mame's updates, specials, and event news your way.",
       });
+      setNewsletterName("");
       setNewsletterEmail("");
     } catch {
       toast({
@@ -127,7 +130,16 @@ const ContactSection = () => {
                 </div>
               </div>
 
-              <form onSubmit={handleNewsletterSubmit} className="flex flex-col gap-3 sm:flex-row">
+              <form onSubmit={handleNewsletterSubmit} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Your Name"
+                  required
+                  maxLength={100}
+                  value={newsletterName}
+                  onChange={(e) => setNewsletterName(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:ring-2 focus:ring-cajun/50"
+                />
                 <input
                   type="email"
                   placeholder="Email Address"
@@ -135,12 +147,12 @@ const ContactSection = () => {
                   maxLength={255}
                   value={newsletterEmail}
                   onChange={(e) => setNewsletterEmail(e.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:ring-2 focus:ring-cajun/50"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground transition-all focus:outline-none focus:ring-2 focus:ring-cajun/50"
                 />
                 <button
                   type="submit"
                   disabled={newsletterSubmitting}
-                  className="rounded-lg bg-cajun px-5 py-3 font-semibold text-primary-foreground transition-all hover:bg-cajun-light hover:shadow-md disabled:opacity-50"
+                  className="w-full rounded-lg bg-cajun px-5 py-3 font-semibold text-primary-foreground transition-all hover:bg-cajun-light hover:shadow-md disabled:opacity-50"
                 >
                   {newsletterSubmitting ? "Joining..." : "Join"}
                 </button>
