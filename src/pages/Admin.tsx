@@ -1,7 +1,26 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
 import { useAction, useQuery } from "convex/react";
-import { ArrowLeft, Download, Inbox, Lock, Mail, MessageSquare, PackageCheck, Phone, Search, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  Boxes,
+  CalendarDays,
+  Download,
+  Inbox,
+  LayoutDashboard,
+  Lock,
+  Mail,
+  Megaphone,
+  MessageSquare,
+  PackageCheck,
+  Phone,
+  Search,
+  Settings,
+  ShoppingBag,
+  Truck,
+  Users,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 
@@ -60,6 +79,17 @@ type InboxItem =
     };
 
 type Filter = "all" | "message" | "order" | "direct";
+type AdminPage =
+  | "dashboard"
+  | "orders"
+  | "products"
+  | "inventory"
+  | "customers"
+  | "marketing"
+  | "reports"
+  | "fulfillment"
+  | "events"
+  | "settings";
 
 type CustomerContact = {
   key: string;
@@ -87,6 +117,20 @@ type AdminInboxResult = {
 const workosClientId = import.meta.env.VITE_WORKOS_CLIENT_ID as string | undefined;
 const workosApiHostname = import.meta.env.VITE_WORKOS_API_HOSTNAME as string | undefined;
 const ADMIN_KEY_STORAGE = "mames-admin-key";
+const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDashboard }> = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "orders", label: "Orders", icon: PackageCheck },
+  { id: "products", label: "Products", icon: ShoppingBag },
+  { id: "inventory", label: "Inventory", icon: Boxes },
+  { id: "customers", label: "Customers", icon: Users },
+  { id: "marketing", label: "Marketing", icon: Megaphone },
+  { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "fulfillment", label: "Fulfillment", icon: Truck },
+  { id: "events", label: "Events", icon: CalendarDays },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
+const topNavItems = adminNavItems.slice(0, 5);
 
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
@@ -177,6 +221,7 @@ const AdminPortal = () => {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activePage, setActivePage] = useState<AdminPage>("dashboard");
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
@@ -327,6 +372,9 @@ const AdminPortal = () => {
   const messageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
   const contactCount = customerContacts.length;
+  const orderItems = inboxItems.filter((item) => item.type === "order");
+  const latestActivityAt = inboxItems[0]?.createdAt;
+  const currentUserLabel = user?.email ?? (isUsingPassword ? "Password access" : "Not signed in");
 
   const handleDownloadContacts = (contacts: CustomerContact[]) => {
     downloadCsv(
@@ -368,32 +416,489 @@ const AdminPortal = () => {
     }
   };
 
+  const alertPanel = (
+    <>
+      {access === "missing" && (
+        <div className="border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
+          WorkOS admin access is not fully configured. Set <span className="font-semibold">WORKOS_CLIENT_ID</span>,{" "}
+          <span className="font-semibold">WORKOS_API_KEY</span>, and{" "}
+          <span className="font-semibold">WORKOS_ADMIN_EMAILS</span> in Convex.
+        </div>
+      )}
+      {access === "denied" && (
+        <div className="flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            {isUsingPassword
+              ? "That admin password did not match. Try again with the current password."
+              : "Your WorkOS account is not allowed to view this admin portal."}
+          </span>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+          >
+            {isUsingPassword ? "Enter password again" : "Sign out"}
+          </button>
+        </div>
+      )}
+      {inboxError && (
+        <div className="flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+          <span>{inboxError}</span>
+          <button
+            type="button"
+            onClick={() => void loadInbox()}
+            className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  const metricsPanel = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="border border-border bg-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-muted-foreground">Customer Messages</p>
+          <MessageSquare className="text-cajun" size={20} />
+        </div>
+        <p className="mt-3 text-3xl font-bold">{isUnlocked ? messageCount : "-"}</p>
+      </div>
+      <div className="border border-border bg-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-muted-foreground">Order Inquiries</p>
+          <PackageCheck className="text-cajun" size={20} />
+        </div>
+        <p className="mt-3 text-3xl font-bold">{isUnlocked ? orderCount : "-"}</p>
+      </div>
+      <div className="border border-border bg-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-muted-foreground">Direct Messages</p>
+          <Inbox className="text-cajun" size={20} />
+        </div>
+        <p className="mt-3 text-3xl font-bold">0</p>
+      </div>
+      <div className="border border-border bg-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-muted-foreground">Saved Contacts</p>
+          <Users className="text-cajun" size={20} />
+        </div>
+        <p className="mt-3 text-3xl font-bold">{isUnlocked ? contactCount : "-"}</p>
+      </div>
+    </div>
+  );
+
+  const customerDatabasePanel = (
+    <div className="border border-border bg-card">
+      <div className="flex flex-col gap-4 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-serif text-2xl font-bold text-foreground">Customer Database</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Names, phone numbers, and emails collected from messages and order inquiries.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleDownloadContacts(visibleContacts)}
+            disabled={!isUnlocked || visibleContacts.length === 0}
+            className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download size={15} />
+            Download shown
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownloadContacts(customerContacts)}
+            disabled={!isUnlocked || customerContacts.length === 0}
+            className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download size={15} />
+            Download all
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">Name</th>
+              <th className="px-5 py-3">Email</th>
+              <th className="px-5 py-3">Phone</th>
+              <th className="px-5 py-3">Source</th>
+              <th className="px-5 py-3">Last Contact</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  Loading contacts...
+                </td>
+              </tr>
+            ) : !isUnlocked ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  Unlock the portal to review customer contacts.
+                </td>
+              </tr>
+            ) : visibleContacts.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  No saved contacts match that search.
+                </td>
+              </tr>
+            ) : (
+              visibleContacts.map((contact) => (
+                <tr key={contact.key} className="border-b border-border last:border-b-0">
+                  <td className="px-5 py-4 font-semibold text-foreground">{contact.name}</td>
+                  <td className="px-5 py-4">
+                    <a className="break-words text-cajun hover:underline" href={`mailto:${contact.email}`}>
+                      {contact.email}
+                    </a>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {contact.phone ? (
+                      <a className="text-foreground hover:underline" href={`tel:${contact.phone}`}>
+                        {contact.phone}
+                      </a>
+                    ) : (
+                      "Not provided"
+                    )}
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {contact.sources.join(" + ")}
+                    <span className="ml-2 text-xs">({contact.totalMessages + contact.totalInquiries})</span>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatDate(contact.lastContactAt)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const inboxWorkspace = (
+    <div className="grid gap-6 lg:grid-cols-[minmax(280px,420px)_1fr]">
+      <aside className="border border-border bg-card">
+        <div className="border-b border-border p-4">
+          <div className="flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2">
+            <Search size={16} className="text-muted-foreground" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, email, phone"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              ["all", "All"],
+              ["message", "Messages"],
+              ["order", "Inquiries"],
+              ["direct", "Direct"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setFilter(value as Filter);
+                  setSelectedId(null);
+                }}
+                className={`rounded-[8px] px-3 py-2 text-sm font-semibold transition-colors ${
+                  filter === value
+                    ? "bg-cajun text-primary-foreground"
+                    : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-h-[620px] overflow-y-auto">
+          {isLoading ? (
+            <p className="p-5 text-sm text-muted-foreground">Loading inbox...</p>
+          ) : !isUnlocked ? (
+            <p className="p-5 text-sm text-muted-foreground">Unlock the portal to view messages.</p>
+          ) : filter === "direct" ? (
+            <div className="p-5 text-sm leading-relaxed text-muted-foreground">
+              Direct social messages will appear here after an inbox integration is connected.
+            </div>
+          ) : visibleItems.length === 0 ? (
+            <p className="p-5 text-sm text-muted-foreground">No matching messages yet.</p>
+          ) : (
+            visibleItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedId(item.id)}
+                className={`block w-full border-b border-border p-4 text-left transition-colors hover:bg-muted ${
+                  activeItem?.id === item.id ? "bg-muted" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-foreground">{item.customerName}</p>
+                    <p className="truncate text-sm text-muted-foreground">{item.email}</p>
+                  </div>
+                  <span className="shrink-0 rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-semibold text-foreground">
+                    {item.type === "message" ? "Message" : "Inquiry"}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{item.preview}</p>
+                <p className="mt-2 text-xs font-semibold text-muted-foreground">{formatDate(item.createdAt)}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <article className="min-h-[460px] border border-border bg-card p-5 md:p-6">
+        {!activeItem ? (
+          <div className="flex min-h-[360px] items-center justify-center text-center">
+            <div>
+              <Inbox className="mx-auto mb-3 text-muted-foreground" size={36} />
+              <p className="font-semibold text-foreground">No message selected</p>
+              <p className="mt-1 text-sm text-muted-foreground">Choose an inbox item to read the details.</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-start md:justify-between">
+              <div>
+                <span className="rounded-[8px] bg-cajun/10 px-3 py-1 text-xs font-bold uppercase text-cajun">
+                  {activeItem.type === "message" ? "Customer Message" : "Order Inquiry"}
+                </span>
+                <h2 className="mt-3 font-serif text-3xl font-bold text-foreground">{activeItem.customerName}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{formatDate(activeItem.createdAt)}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`mailto:${activeItem.email}`}
+                  className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+                >
+                  <Mail size={15} />
+                  Email
+                </a>
+                {activeItem.phone && (
+                  <a
+                    href={`tel:${activeItem.phone}`}
+                    className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                  >
+                    <Phone size={15} />
+                    Call
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <dl className="mt-5 grid gap-4 md:grid-cols-2">
+              <div>
+                <dt className="text-xs font-bold uppercase text-muted-foreground">Email</dt>
+                <dd className="mt-1 break-words text-sm text-foreground">{activeItem.email}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold uppercase text-muted-foreground">Phone</dt>
+                <dd className="mt-1 text-sm text-foreground">{activeItem.phone || "Not provided"}</dd>
+              </div>
+            </dl>
+
+            {activeItem.type === "message" ? (
+              <div className="mt-6">
+                <h3 className="font-serif text-xl font-bold">Message</h3>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">{activeItem.body}</p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-6">
+                <div>
+                  <h3 className="font-serif text-xl font-bold">Inquiry Details</h3>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Status</p>
+                      <p className="mt-1 text-sm font-semibold">
+                        {activeItem.status === "submitted" ? "Submitted" : "Checkout started"}
+                      </p>
+                    </div>
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Payment</p>
+                      <p className="mt-1 text-sm font-semibold">{activeItem.paymentMethod === "stripe" ? "Stripe" : "Email"}</p>
+                    </div>
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Total</p>
+                      <p className="mt-1 text-sm font-semibold">{formatCurrency(activeItem.total)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-serif text-xl font-bold">Items</h3>
+                  <div className="mt-3 overflow-hidden border border-border">
+                    {activeItem.items.map((item) => (
+                      <div key={item.productId} className="grid gap-2 border-b border-border p-3 text-sm last:border-b-0 md:grid-cols-[1fr_auto_auto]">
+                        <span className="font-semibold">{item.name}</span>
+                        <span className="text-muted-foreground">Qty {item.quantity}</span>
+                        <span>{formatCurrency(item.lineTotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-serif text-xl font-bold">Notes</h3>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">{activeItem.notes || "No notes included."}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </article>
+    </div>
+  );
+
+  const ordersPanel = (
+    <div className="space-y-6">
+      <div className="border border-border bg-card p-5">
+        <h2 className="font-serif text-2xl font-bold text-foreground">Orders</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Review order inquiries and checkout starts.</p>
+      </div>
+      <div className="overflow-x-auto border border-border bg-card">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">Customer</th>
+              <th className="px-5 py-3">Email</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Payment</th>
+              <th className="px-5 py-3">Total</th>
+              <th className="px-5 py-3">Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  Loading orders...
+                </td>
+              </tr>
+            ) : !isUnlocked ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  Unlock the portal to review orders.
+                </td>
+              </tr>
+            ) : orderItems.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  No order inquiries yet.
+                </td>
+              </tr>
+            ) : (
+              orderItems.map((item) => (
+                <tr key={item.id} className="border-b border-border last:border-b-0">
+                  <td className="px-5 py-4 font-semibold text-foreground">{item.customerName}</td>
+                  <td className="px-5 py-4 text-cajun">{item.email}</td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {item.status === "submitted" ? "Submitted" : "Checkout started"}
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">{item.paymentMethod === "stripe" ? "Stripe" : "Email"}</td>
+                  <td className="px-5 py-4 font-semibold">{formatCurrency(item.total)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatDate(item.createdAt)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const placeholderPanel = (title: string, description: string) => (
+    <div className="border border-border bg-card p-6">
+      <h2 className="font-serif text-2xl font-bold text-foreground">{title}</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
+  );
+
+  const renderPageContent = () => {
+    if (activePage === "orders") {
+      return ordersPanel;
+    }
+
+    if (activePage === "customers") {
+      return customerDatabasePanel;
+    }
+
+    if (activePage === "reports") {
+      return (
+        <div className="space-y-6">
+          {metricsPanel}
+          {placeholderPanel("Reports", "High-level reports are ready for sales, customer, and message trends as more data comes in.")}
+        </div>
+      );
+    }
+
+    if (activePage !== "dashboard") {
+      const item = adminNavItems.find((navItem) => navItem.id === activePage);
+      return placeholderPanel(item?.label ?? "Admin Area", "This workspace is ready for the next set of tools.");
+    }
+
+    return (
+      <div className="space-y-6">
+        {metricsPanel}
+        {customerDatabasePanel}
+        {inboxWorkspace}
+      </div>
+    );
+  };
+
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto flex flex-col gap-5 px-4 py-6 md:flex-row md:items-center md:justify-between">
-          <div>
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+        <div className="flex min-h-16 flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-4">
+            <Link to="/" className="font-serif text-xl font-bold text-foreground">
+              Mame's
+            </Link>
+            <nav className="flex flex-wrap items-center gap-1">
+              {topNavItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActivePage(item.id)}
+                  className={`rounded-[8px] px-3 py-2 text-sm font-semibold transition-colors ${
+                    activePage === item.id ? "bg-cajun text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               to="/"
-              className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-cajun"
+              className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <ArrowLeft size={16} />
-              Back to website
+              <ArrowLeft size={15} />
+              Website
             </Link>
-            <h1 className="font-serif text-3xl font-bold text-foreground md:text-5xl">Admin Portal</h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground md:text-base">
-              Customer messages, order inquiries, and direct message follow-ups in one place.
-            </p>
+            {(user || fallbackKey) && (
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                {user ? "Sign out" : "Lock portal"}
+              </button>
+            )}
           </div>
-          {(user || fallbackKey) && (
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="w-fit rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-            >
-              {user ? "Sign out" : "Lock portal"}
-            </button>
-          )}
         </div>
       </header>
 
@@ -410,9 +915,9 @@ const AdminPortal = () => {
               <Lock size={22} />
             </div>
             <div>
-              <h2 className="font-serif text-2xl font-bold">Admin sign in</h2>
+              <h1 className="font-serif text-3xl font-bold text-foreground">Admin Portal</h1>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Sign in with your approved WorkOS account to view customer messages and inquiries.
+                Sign in to manage messages, orders, customers, and operations.
               </p>
             </div>
             <button
@@ -443,353 +948,64 @@ const AdminPortal = () => {
           </div>
         </section>
       ) : (
-        <section className="container mx-auto px-4 py-8 md:py-10">
-          {access === "missing" && (
-            <div className="mb-6 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
-              WorkOS admin access is not fully configured. Set{" "}
-              <span className="font-semibold">WORKOS_CLIENT_ID</span>,{" "}
-              <span className="font-semibold">WORKOS_API_KEY</span>, and{" "}
-              <span className="font-semibold">WORKOS_ADMIN_EMAILS</span> in Convex.
+        <div className="grid min-h-[calc(100vh-65px)] lg:grid-cols-[260px_1fr]">
+          <aside className="border-b border-border bg-card lg:border-b-0 lg:border-r">
+            <div className="border-b border-border p-5">
+              <p className="font-serif text-2xl font-bold text-foreground">Admin Portal</p>
+              <p className="mt-1 text-xs font-semibold uppercase text-muted-foreground">Mame's Cane River Meat Pies</p>
             </div>
-          )}
-          {access === "denied" && (
-            <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                {isUsingPassword
-                  ? "That admin password did not match. Try again with the current password."
-                  : "Your WorkOS account is not allowed to view this admin portal."}
-              </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-              >
-                {isUsingPassword ? "Enter password again" : "Sign out"}
-              </button>
-            </div>
-          )}
-          {inboxError && (
-            <div className="mb-6 flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>{inboxError}</span>
-              <button
-                type="button"
-                onClick={() => void loadInbox()}
-                className="w-fit rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-              >
-                Try again
-              </button>
-            </div>
-          )}
+            <nav className="grid gap-1 p-3">
+              {adminNavItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActivePage(item.id)}
+                    className={`flex items-center gap-3 rounded-[8px] px-3 py-3 text-left text-sm font-semibold transition-colors ${
+                      activePage === item.id ? "bg-cajun text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
 
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="border border-border bg-card p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-muted-foreground">Customer Messages</p>
-                <MessageSquare className="text-cajun" size={20} />
-              </div>
-              <p className="mt-3 text-3xl font-bold">{isUnlocked ? messageCount : "-"}</p>
-            </div>
-            <div className="border border-border bg-card p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-muted-foreground">Order Inquiries</p>
-                <PackageCheck className="text-cajun" size={20} />
-              </div>
-              <p className="mt-3 text-3xl font-bold">{isUnlocked ? orderCount : "-"}</p>
-            </div>
-            <div className="border border-border bg-card p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-muted-foreground">Direct Messages</p>
-                <Inbox className="text-cajun" size={20} />
-              </div>
-              <p className="mt-3 text-3xl font-bold">0</p>
-            </div>
-            <div className="border border-border bg-card p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-muted-foreground">Saved Contacts</p>
-                <Users className="text-cajun" size={20} />
-              </div>
-              <p className="mt-3 text-3xl font-bold">{isUnlocked ? contactCount : "-"}</p>
-            </div>
-          </div>
-
-          <div className="mt-8 border border-border bg-card">
-            <div className="flex flex-col gap-4 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="font-serif text-2xl font-bold text-foreground">Customer Database</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Names, phone numbers, and emails collected from messages and order inquiries.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownloadContacts(visibleContacts)}
-                  disabled={!isUnlocked || visibleContacts.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Download size={15} />
-                  Download shown
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadContacts(customerContacts)}
-                  disabled={!isUnlocked || customerContacts.length === 0}
-                  className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Download size={15} />
-                  Download all
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-border bg-background text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-5 py-3">Name</th>
-                    <th className="px-5 py-3">Email</th>
-                    <th className="px-5 py-3">Phone</th>
-                    <th className="px-5 py-3">Source</th>
-                    <th className="px-5 py-3">Last Contact</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
-                        Loading contacts...
-                      </td>
-                    </tr>
-                  ) : !isUnlocked ? (
-                    <tr>
-                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
-                        Unlock the portal to review customer contacts.
-                      </td>
-                    </tr>
-                  ) : visibleContacts.length === 0 ? (
-                    <tr>
-                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
-                        No saved contacts match that search.
-                      </td>
-                    </tr>
-                  ) : (
-                    visibleContacts.map((contact) => (
-                      <tr key={contact.key} className="border-b border-border last:border-b-0">
-                        <td className="px-5 py-4 font-semibold text-foreground">{contact.name}</td>
-                        <td className="px-5 py-4">
-                          <a className="break-words text-cajun hover:underline" href={`mailto:${contact.email}`}>
-                            {contact.email}
-                          </a>
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {contact.phone ? (
-                            <a className="text-foreground hover:underline" href={`tel:${contact.phone}`}>
-                              {contact.phone}
-                            </a>
-                          ) : (
-                            "Not provided"
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">
-                          {contact.sources.join(" + ")}
-                          <span className="ml-2 text-xs">
-                            ({contact.totalMessages + contact.totalInquiries})
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-muted-foreground">{formatDate(contact.lastContactAt)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(280px,420px)_1fr]">
-            <aside className="border border-border bg-card">
-              <div className="border-b border-border p-4">
-                <div className="flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2">
-                  <Search size={16} className="text-muted-foreground" />
+          <div className="flex min-h-[calc(100vh-65px)] flex-col">
+            <section className="flex-1 space-y-6 px-4 py-6 md:px-6 lg:px-8">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase text-muted-foreground">Dashboard</p>
+                  <h1 className="font-serif text-3xl font-bold text-foreground md:text-4xl">
+                    {adminNavItems.find((item) => item.id === activePage)?.label ?? "Dashboard"}
+                  </h1>
+                </div>
+                <div className="flex items-center gap-2 rounded-[8px] border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                  <Search size={16} />
                   <input
                     type="search"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search name, email, phone"
-                    className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    placeholder="Search admin data"
+                    className="w-48 bg-transparent outline-none placeholder:text-muted-foreground"
                   />
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {[
-                    ["all", "All"],
-                    ["message", "Messages"],
-                    ["order", "Inquiries"],
-                    ["direct", "Direct"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        setFilter(value as Filter);
-                        setSelectedId(null);
-                      }}
-                      className={`rounded-[8px] px-3 py-2 text-sm font-semibold transition-colors ${
-                        filter === value
-                          ? "bg-cajun text-primary-foreground"
-                          : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              <div className="max-h-[620px] overflow-y-auto">
-                {isLoading ? (
-                  <p className="p-5 text-sm text-muted-foreground">Loading inbox...</p>
-                ) : !isUnlocked ? (
-                  <p className="p-5 text-sm text-muted-foreground">Sign in with an approved WorkOS account to view messages.</p>
-                ) : filter === "direct" ? (
-                  <div className="p-5 text-sm leading-relaxed text-muted-foreground">
-                    Direct social messages will appear here after an inbox integration is connected.
-                  </div>
-                ) : visibleItems.length === 0 ? (
-                  <p className="p-5 text-sm text-muted-foreground">No matching messages yet.</p>
-                ) : (
-                  visibleItems.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedId(item.id)}
-                      className={`block w-full border-b border-border p-4 text-left transition-colors hover:bg-muted ${
-                        activeItem?.id === item.id ? "bg-muted" : ""
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-foreground">{item.customerName}</p>
-                          <p className="truncate text-sm text-muted-foreground">{item.email}</p>
-                        </div>
-                        <span className="shrink-0 rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-semibold text-foreground">
-                          {item.type === "message" ? "Message" : "Inquiry"}
-                        </span>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{item.preview}</p>
-                      <p className="mt-2 text-xs font-semibold text-muted-foreground">{formatDate(item.createdAt)}</p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </aside>
+              {alertPanel}
+              {renderPageContent()}
+            </section>
 
-            <article className="min-h-[460px] border border-border bg-card p-5 md:p-6">
-              {!activeItem ? (
-                <div className="flex min-h-[360px] items-center justify-center text-center">
-                  <div>
-                    <Inbox className="mx-auto mb-3 text-muted-foreground" size={36} />
-                    <p className="font-semibold text-foreground">No message selected</p>
-                    <p className="mt-1 text-sm text-muted-foreground">Choose an inbox item to read the details.</p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <span className="rounded-[8px] bg-cajun/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cajun">
-                        {activeItem.type === "message" ? "Customer Message" : "Order Inquiry"}
-                      </span>
-                      <h2 className="mt-3 font-serif text-3xl font-bold text-foreground">{activeItem.customerName}</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">{formatDate(activeItem.createdAt)}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <a
-                        href={`mailto:${activeItem.email}`}
-                        className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-                      >
-                        <Mail size={15} />
-                        Email
-                      </a>
-                      {activeItem.phone && (
-                        <a
-                          href={`tel:${activeItem.phone}`}
-                          className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                        >
-                          <Phone size={15} />
-                          Call
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  <dl className="mt-5 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <dt className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Email</dt>
-                      <dd className="mt-1 break-words text-sm text-foreground">{activeItem.email}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Phone</dt>
-                      <dd className="mt-1 text-sm text-foreground">{activeItem.phone || "Not provided"}</dd>
-                    </div>
-                  </dl>
-
-                  {activeItem.type === "message" ? (
-                    <div className="mt-6">
-                      <h3 className="font-serif text-xl font-bold">Message</h3>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">{activeItem.body}</p>
-                    </div>
-                  ) : (
-                    <div className="mt-6 space-y-6">
-                      <div>
-                        <h3 className="font-serif text-xl font-bold">Inquiry Details</h3>
-                        <div className="mt-3 grid gap-3 md:grid-cols-3">
-                          <div className="border border-border bg-background p-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Status</p>
-                            <p className="mt-1 text-sm font-semibold">
-                              {activeItem.status === "submitted" ? "Submitted" : "Checkout started"}
-                            </p>
-                          </div>
-                          <div className="border border-border bg-background p-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Payment</p>
-                            <p className="mt-1 text-sm font-semibold">
-                              {activeItem.paymentMethod === "stripe" ? "Stripe" : "Email"}
-                            </p>
-                          </div>
-                          <div className="border border-border bg-background p-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Total</p>
-                            <p className="mt-1 text-sm font-semibold">{formatCurrency(activeItem.total)}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-serif text-xl font-bold">Items</h3>
-                        <div className="mt-3 overflow-hidden border border-border">
-                          {activeItem.items.map((item) => (
-                            <div
-                              key={item.productId}
-                              className="grid gap-2 border-b border-border p-3 text-sm last:border-b-0 md:grid-cols-[1fr_auto_auto]"
-                            >
-                              <span className="font-semibold">{item.name}</span>
-                              <span className="text-muted-foreground">Qty {item.quantity}</span>
-                              <span>{formatCurrency(item.lineTotal)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="font-serif text-xl font-bold">Notes</h3>
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">
-                          {activeItem.notes || "No notes included."}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </article>
+            <footer className="flex flex-col gap-2 border-t border-border bg-card px-4 py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6 lg:px-8">
+              <span>System Status: {isUnlocked ? "Online" : "Locked"}</span>
+              <span>Last Sync: {latestActivityAt ? formatDate(latestActivityAt) : "Waiting for data"}</span>
+              <span>User Logged In: {currentUserLabel}</span>
+            </footer>
           </div>
-        </section>
+        </div>
       )}
     </main>
   );
