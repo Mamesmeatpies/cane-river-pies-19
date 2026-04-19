@@ -28,4 +28,19 @@ export default defineSchema({
     total: v.number(),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
+  products: defineTable({
+    productId: v.string(),
+    name: v.string(),
+    sku: v.string(),
+    description: v.string(),
+    category: v.string(),
+    price: v.number(),
+    stock: v.number(),
+    status: v.union(v.literal("active"), v.literal("draft"), v.literal("low_stock")),
+    imageKey: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_productId", ["productId"])
+    .index("by_status", ["status"]),
 });

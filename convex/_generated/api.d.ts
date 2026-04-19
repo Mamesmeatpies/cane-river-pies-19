@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as contactMessages from "../contactMessages.js";
 import type * as notifications from "../notifications.js";
 import type * as orders from "../orders.js";
+import type * as products from "../products.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   contactMessages: typeof contactMessages;
   notifications: typeof notifications;
   orders: typeof orders;
+  products: typeof products;
 }>;
 
 /**
