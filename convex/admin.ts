@@ -104,7 +104,7 @@ export const getInboxForAdmin = action({
         };
       }
 
-      const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
+      const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
       const [messages, orders] = await Promise.all([
         ctx.runQuery(internal.contactMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.orders.listLatestInternal, { limit }),
