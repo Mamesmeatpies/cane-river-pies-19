@@ -16,6 +16,7 @@ import {
   Megaphone,
   MessageSquare,
   PackageCheck,
+  Pencil,
   Phone,
   Plus,
   Search,
@@ -84,6 +85,7 @@ type InboxItem =
 
 type Filter = "all" | "message" | "order" | "direct";
 type SalesRange = "daily" | "weekly" | "monthly";
+type ProductStatus = "active" | "draft" | "low_stock";
 type AdminPage =
   | "dashboard"
   | "orders"
@@ -105,6 +107,15 @@ type CustomerContact = {
   lastContactAt: number;
   totalMessages: number;
   totalInquiries: number;
+};
+
+type AdminProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stock: number;
+  status: ProductStatus;
 };
 
 type AdminInboxResult = {
@@ -136,6 +147,40 @@ const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDa
 ];
 
 const topNavItems = adminNavItems.slice(0, 5);
+const adminProducts: AdminProduct[] = [
+  {
+    id: "beef-pork",
+    name: "Beef & Pork Meat Pie",
+    sku: "MAME-BP-DOZ",
+    price: 30,
+    stock: 48,
+    status: "active",
+  },
+  {
+    id: "spicy",
+    name: "Beef & Pork Spicy",
+    sku: "MAME-SP-DOZ",
+    price: 30,
+    stock: 22,
+    status: "active",
+  },
+  {
+    id: "turkey",
+    name: "Turkey Meat Pie",
+    sku: "MAME-TK-DOZ",
+    price: 30,
+    stock: 16,
+    status: "active",
+  },
+  {
+    id: "mini",
+    name: "Mini Beef & Pork Pies",
+    sku: "MAME-MINI-12",
+    price: 20,
+    stock: 8,
+    status: "low_stock",
+  },
+];
 
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
@@ -228,6 +273,7 @@ const AdminPortal = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
   const [salesRange, setSalesRange] = useState<SalesRange>("daily");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
@@ -386,6 +432,18 @@ const AdminPortal = () => {
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
   const lowStockAlerts = 0;
   const recentOrders = orderItems.slice(0, 5);
+  const visibleProducts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return adminProducts;
+    }
+
+    return adminProducts.filter((product) =>
+      [product.name, product.sku, product.status].some((value) => value.toLowerCase().includes(normalizedSearch))
+    );
+  }, [search]);
+  const selectedProduct = adminProducts.find((product) => product.id === selectedProductId);
   const dashboardAlerts = [
     {
       title: "Low inventory: Meat Pies",
@@ -1073,6 +1131,91 @@ const AdminPortal = () => {
     </div>
   );
 
+  const productsPanel = (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 border border-border bg-card p-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-serif text-2xl font-bold text-foreground">Products</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Manage storefront products, pricing, stock, and availability.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSelectedProductId(null)}
+          className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+        >
+          <Plus size={15} />
+          Add Product
+        </button>
+      </div>
+
+      <div className="overflow-x-auto border border-border bg-card">
+        <div className="border-b border-border p-5">
+          <h3 className="font-serif text-xl font-bold text-foreground">Product List</h3>
+        </div>
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">Name</th>
+              <th className="px-5 py-3">SKU</th>
+              <th className="px-5 py-3">Price</th>
+              <th className="px-5 py-3">Stock</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Edit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleProducts.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                  No products match that search.
+                </td>
+              </tr>
+            ) : (
+              visibleProducts.map((product) => (
+                <tr key={product.id} className="border-b border-border last:border-b-0">
+                  <td className="px-5 py-4 font-semibold text-foreground">{product.name}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{product.sku}</td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(product.price)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{product.stock}</td>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${
+                        product.status === "active"
+                          ? "bg-green-100 text-green-800"
+                          : product.status === "low_stock"
+                            ? "bg-gold/20 text-foreground"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {product.status === "low_stock" ? "Low Stock" : product.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProductId(product.id)}
+                      className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      <Pencil size={14} />
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="border border-border bg-card p-5">
+        <h3 className="font-serif text-xl font-bold text-foreground">{selectedProduct ? `Editing ${selectedProduct.name}` : "Add Product"}</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Product editing controls are ready for the database step. For now, the table reflects the current storefront catalog.
+        </p>
+      </div>
+    </div>
+  );
+
   const placeholderPanel = (title: string, description: string) => (
     <div className="border border-border bg-card p-6">
       <h2 className="font-serif text-2xl font-bold text-foreground">{title}</h2>
@@ -1083,6 +1226,10 @@ const AdminPortal = () => {
   const renderPageContent = () => {
     if (activePage === "orders") {
       return ordersPanel;
+    }
+
+    if (activePage === "products") {
+      return productsPanel;
     }
 
     if (activePage === "customers") {
