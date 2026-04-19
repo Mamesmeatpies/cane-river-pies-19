@@ -619,6 +619,38 @@ const AdminPortal = () => {
       detail: "Stripe checkout monitoring is ready for the next integration step.",
     },
   ];
+  const promoCodeRows = [
+    {
+      code: "MAMES10",
+      discount: "10% off",
+      usage: "Ready",
+      expiration: "No expiration set",
+    },
+    {
+      code: "LOCALPICKUP",
+      discount: "$5 off",
+      usage: "Ready",
+      expiration: "No expiration set",
+    },
+  ];
+  const inactiveSince = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const audienceSegments = [
+    {
+      name: "Repeat Customers",
+      count: customerProfiles.filter((profile) => profile.orderCount > 1).length,
+      detail: "Customers with more than one order inquiry.",
+    },
+    {
+      name: "First-Time Buyers",
+      count: customerProfiles.filter((profile) => profile.orderCount === 1).length,
+      detail: "Customers with one recorded order inquiry.",
+    },
+    {
+      name: "Inactive (30+ days)",
+      count: customerProfiles.filter((profile) => profile.lastContactAt < inactiveSince).length,
+      detail: "Customers without recent messages or order inquiries.",
+    },
+  ];
   const salesBuckets = useMemo(() => {
     const buckets =
       salesRange === "daily"
@@ -1344,6 +1376,124 @@ const AdminPortal = () => {
     </div>
   );
 
+  const marketingPanel = (
+    <div className="space-y-6">
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-foreground">Marketing</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Plan campaigns, promo codes, email, and SMS outreach.</p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+          >
+            <Megaphone size={15} />
+            Create Campaign
+          </button>
+        </div>
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Campaigns", icon: Megaphone },
+            { label: "Promo Codes", icon: Tag },
+            { label: "Email", icon: Mail },
+            { label: "SMS", icon: MessageSquare },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                className="flex items-center justify-between rounded-[8px] border border-border bg-background px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                <span>{item.label}</span>
+                <Icon className="text-cajun" size={18} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+        <div className="border border-border bg-card">
+          <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="font-serif text-2xl font-bold text-foreground">Promo Codes</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Track discount codes and expirations.</p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+            >
+              <Plus size={15} />
+              Create Promo Code
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left text-sm">
+              <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3">Code</th>
+                  <th className="px-5 py-3">Discount</th>
+                  <th className="px-5 py-3">Usage</th>
+                  <th className="px-5 py-3">Expiration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {promoCodeRows.map((promoCode) => (
+                  <tr key={promoCode.code} className="border-b border-border last:border-b-0">
+                    <td className="px-5 py-4 font-semibold text-foreground">{promoCode.code}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{promoCode.discount}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{promoCode.usage}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{promoCode.expiration}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-serif text-2xl font-bold text-foreground">Email / SMS</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Audience segments for campaign targeting.</p>
+            </div>
+            <div className="flex gap-2">
+              <Mail className="text-cajun" size={18} />
+              <MessageSquare className="text-cajun" size={18} />
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <p className="text-xs font-bold uppercase text-muted-foreground">Audience Segments</p>
+            {audienceSegments.map((segment) => (
+              <div key={segment.name} className="border border-border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-foreground">{segment.name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{segment.detail}</p>
+                  </div>
+                  <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                    {isUnlocked ? segment.count : "-"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-[8px] border border-border px-3 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            <Megaphone size={15} />
+            Create Campaign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const inboxWorkspace = (
     <div className="grid gap-6 lg:grid-cols-[minmax(280px,420px)_1fr]">
       <aside className="border border-border bg-card">
@@ -1999,6 +2149,10 @@ const AdminPortal = () => {
 
     if (activePage === "customers") {
       return customerDirectoryPanel;
+    }
+
+    if (activePage === "marketing") {
+      return marketingPanel;
     }
 
     if (activePage === "reports") {
