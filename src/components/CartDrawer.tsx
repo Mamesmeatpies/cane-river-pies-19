@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { CreditCard, Minus, Phone, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
+import { CreditCard, Minus, Phone, Plus, ShoppingCart, Tag, Trash2, X, Send } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
@@ -9,11 +9,26 @@ import { buildStripePaymentLink, hasStripePaymentLink } from "@/lib/stripePaymen
 const STRIPE_CHECKOUT_ENABLED = false;
 
 const CartDrawer = () => {
-  const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isOpen, setIsOpen } = useCart();
+  const {
+    items,
+    removeItem,
+    updateQuantity,
+    clearCart,
+    totalItems,
+    cartSubtotal,
+    appliedPromo,
+    promoDiscount,
+    totalPrice,
+    applyPromoCode,
+    removePromoCode,
+    isOpen,
+    setIsOpen,
+  } = useCart();
   const createOrder = useMutation(api.orders.create);
   const submitOrder = useAction(api.notifications.submitOrder);
   const [showCheckout, setShowCheckout] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [promoEntry, setPromoEntry] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -28,6 +43,21 @@ const CartDrawer = () => {
     window.setTimeout(() => {
       document.getElementById("shop")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
+  };
+
+  const handleApplyPromo = () => {
+    if (!promoEntry.trim()) {
+      toast.error("Enter a promo code first.");
+      return;
+    }
+
+    if (!applyPromoCode(promoEntry)) {
+      toast.error("That promo code is not available.");
+      return;
+    }
+
+    setPromoEntry("");
+    toast.success("Promo code applied.");
   };
 
   const saveOrder = async (paymentMethod: "stripe" | "email") => {
@@ -45,6 +75,9 @@ const CartDrawer = () => {
         quantity: item.quantity,
         lineTotal: item.priceNum * item.quantity,
       })),
+      subtotal: cartSubtotal,
+      promoCode: appliedPromo?.code,
+      promoDiscount,
       total: totalPrice,
     });
   };
@@ -62,6 +95,9 @@ const CartDrawer = () => {
         quantity: item.quantity,
         lineTotal: item.priceNum * item.quantity,
       })),
+      subtotal: cartSubtotal,
+      promoCode: appliedPromo?.code,
+      promoDiscount,
       total: totalPrice,
     });
 
@@ -194,9 +230,21 @@ const CartDrawer = () => {
               />
 
               <div className="border-t border-border pt-4">
-                <div className="flex justify-between font-bold text-lg mb-4">
-                  <span>Total:</span>
-                  <span className="text-cajun">${totalPrice.toFixed(2)}</span>
+                <div className="mb-4 space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal:</span>
+                    <span>${cartSubtotal.toFixed(2)}</span>
+                  </div>
+                  {appliedPromo && (
+                    <div className="flex justify-between font-semibold text-emerald-700">
+                      <span>Promo ({appliedPromo.code}):</span>
+                      <span>-${promoDiscount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-border pt-2 font-bold text-lg">
+                    <span>Total:</span>
+                    <span className="text-cajun">${totalPrice.toFixed(2)}</span>
+                  </div>
                 </div>
                 {STRIPE_CHECKOUT_ENABLED ? (
                   <>
@@ -294,6 +342,53 @@ const CartDrawer = () => {
                   </div>
                 </div>
               ))}
+              <div className="border border-border p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Tag size={15} className="text-cajun" />
+                  Promo code
+                </div>
+                {appliedPromo ? (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-semibold text-foreground">{appliedPromo.code}</p>
+                      <p className="text-muted-foreground">
+                        {appliedPromo.label} applied. You saved ${promoDiscount.toFixed(2)}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removePromoCode}
+                      className="text-sm font-semibold text-cajun transition-colors hover:text-cajun-light"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex gap-2">
+                    <input
+                      type="text"
+                      value={promoEntry}
+                      onChange={(e) => setPromoEntry(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleApplyPromo();
+                        }
+                      }}
+                      placeholder="Enter code"
+                      className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm uppercase text-foreground placeholder:normal-case placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-cajun/50"
+                      maxLength={30}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      className="rounded-lg bg-cajun px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -301,9 +396,21 @@ const CartDrawer = () => {
         {/* Footer */}
         {items.length > 0 && !showCheckout && (
           <div className="p-6 border-t border-border space-y-3">
-            <div className="flex justify-between font-bold text-lg">
-              <span>Total:</span>
-              <span className="text-cajun">${totalPrice.toFixed(2)}</span>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal:</span>
+                <span>${cartSubtotal.toFixed(2)}</span>
+              </div>
+              {appliedPromo && (
+                <div className="flex justify-between font-semibold text-emerald-700">
+                  <span>Promo ({appliedPromo.code}):</span>
+                  <span>-${promoDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-border pt-2 font-bold text-lg">
+                <span>Total:</span>
+                <span className="text-cajun">${totalPrice.toFixed(2)}</span>
+              </div>
             </div>
             <button
               onClick={() => setShowCheckout(true)}

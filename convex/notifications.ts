@@ -169,6 +169,9 @@ export const submitOrder = action({
     phone: v.string(),
     notes: v.optional(v.string()),
     items: v.array(orderItemValidator),
+    subtotal: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
+    promoDiscount: v.optional(v.number()),
     total: v.number(),
   },
   handler: async (ctx, args) => {
@@ -198,6 +201,13 @@ export const submitOrder = action({
         "Items:",
         orderLines,
         "",
+        ...(args.promoCode
+          ? [
+              `Subtotal: ${formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0))}`,
+              `Promo: ${args.promoCode} (-${formatCurrency(args.promoDiscount ?? 0)})`,
+              "",
+            ]
+          : []),
         `Total: ${formatCurrency(args.total)}`,
         "",
         `Notes: ${args.notes ?? "None"}`,

@@ -67,6 +67,9 @@ type Order = {
     quantity: number;
     lineTotal: number;
   }>;
+  subtotal?: number;
+  promoCode?: string;
+  promoDiscount?: number;
   total: number;
   createdAt: number;
 };
@@ -106,6 +109,9 @@ type InboxItem =
       paymentMethod: "stripe" | "email";
       status: "checkout_started" | "submitted";
       items: Order["items"];
+      subtotal?: number;
+      promoCode?: string;
+      promoDiscount?: number;
       total: number;
     };
 
@@ -508,6 +514,9 @@ const AdminPortal = () => {
         paymentMethod: order.paymentMethod,
         status: order.status,
         items: order.items,
+        subtotal: order.subtotal,
+        promoCode: order.promoCode,
+        promoDiscount: order.promoDiscount,
         total: order.total,
       })) ?? [];
 
@@ -1917,6 +1926,17 @@ const AdminPortal = () => {
                       <p className="mt-1 text-sm font-semibold">{formatCurrency(activeItem.total)}</p>
                     </div>
                   </div>
+                  {activeItem.promoCode && (
+                    <div className="mt-3 border border-border bg-background p-3 text-sm">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Promo</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {activeItem.promoCode} saved {formatCurrency(activeItem.promoDiscount ?? 0)}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        Subtotal: {formatCurrency(activeItem.subtotal ?? activeItem.total + (activeItem.promoDiscount ?? 0))}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div>

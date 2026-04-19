@@ -32,6 +32,9 @@ export const create = mutation({
         lineTotal: v.number(),
       })
     ),
+    subtotal: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
+    promoDiscount: v.optional(v.number()),
     total: v.number(),
   },
   handler: async (ctx, args) => {

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { AppliedPromo, getAppliedPromo, normalizePromoCode } from "@/lib/promos";
 
 export interface CartItem {
   id: string;
@@ -16,7 +17,13 @@ interface CartContextType {
   updateQuantity: (id: string, qty: number) => void;
   clearCart: () => void;
   totalItems: number;
+  cartSubtotal: number;
+  promoCode: string;
+  appliedPromo: AppliedPromo | null;
+  promoDiscount: number;
   totalPrice: number;
+  applyPromoCode: (code: string) => boolean;
+  removePromoCode: () => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
 }
@@ -32,6 +39,7 @@ export const useCart = () => {
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
 
   const addItem = (item: Omit<CartItem, "quantity">, qty: number) => {
     setItems((prev) => {
@@ -56,14 +64,50 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    setPromoCode("");
+  };
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const totalPrice = items.reduce((sum, i) => sum + i.priceNum * i.quantity, 0);
+  const cartSubtotal = items.reduce((sum, i) => sum + i.priceNum * i.quantity, 0);
+  const appliedPromo = promoCode ? getAppliedPromo(promoCode, cartSubtotal) : null;
+  const promoDiscount = appliedPromo?.discountAmount ?? 0;
+  const totalPrice = Math.max(0, cartSubtotal - promoDiscount);
+
+  const applyPromoCode = (code: string) => {
+    const normalizedCode = normalizePromoCode(code);
+    const promo = getAppliedPromo(normalizedCode, cartSubtotal);
+
+    if (!promo) {
+      return false;
+    }
+
+    setPromoCode(normalizedCode);
+    return true;
+  };
+
+  const removePromoCode = () => setPromoCode("");
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isOpen, setIsOpen }}
+      value={{
+        items,
+        addItem,
+        removeItem,
+        updateQuantity,
+        clearCart,
+        totalItems,
+        cartSubtotal,
+        promoCode,
+        appliedPromo,
+        promoDiscount,
+        totalPrice,
+        applyPromoCode,
+        removePromoCode,
+        isOpen,
+        setIsOpen,
+      }}
     >
       {children}
     </CartContext.Provider>

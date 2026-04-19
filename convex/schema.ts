@@ -65,6 +65,9 @@ export default defineSchema({
         lineTotal: v.number(),
       })
     ),
+    subtotal: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
+    promoDiscount: v.optional(v.number()),
     total: v.number(),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
