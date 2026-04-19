@@ -40,6 +40,17 @@ type ContactMessage = {
   createdAt: number;
 };
 
+type DirectMessage = {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  platform: "instagram" | "facebook" | "website" | "other";
+  handle?: string;
+  message: string;
+  createdAt: number;
+};
+
 type Order = {
   _id: string;
   name: string;
@@ -69,6 +80,18 @@ type InboxItem =
       preview: string;
       body: string;
       createdAt: number;
+    }
+  | {
+      id: string;
+      type: "direct";
+      customerName: string;
+      email?: string;
+      phone?: string;
+      preview: string;
+      body: string;
+      createdAt: number;
+      platform: DirectMessage["platform"];
+      handle?: string;
     }
   | {
       id: string;
@@ -105,18 +128,21 @@ type CustomerContact = {
   name: string;
   email: string;
   phone: string;
-  sources: Array<"Message" | "Inquiry">;
+  sources: Array<"Message" | "Inquiry" | "Direct">;
   lastContactAt: number;
   totalMessages: number;
+  totalDirectMessages: number;
   totalInquiries: number;
 };
+
+type ConversationItem = Extract<InboxItem, { type: "message" | "direct" }>;
 
 type CustomerProfile = CustomerContact & {
   orderCount: number;
   lifetimeValue: number;
   lastOrderAt?: number;
   orders: Extract<InboxItem, { type: "order" }>[];
-  messages: Extract<InboxItem, { type: "message" }>[];
+  messages: ConversationItem[];
   notes: {
     vip: string;
     issues: string;
@@ -151,6 +177,7 @@ type AdminInboxResult = {
     lastName?: string | null;
   } | null;
   messages: ContactMessage[];
+  directMessages: DirectMessage[];
   orders: Order[];
 };
 
@@ -198,6 +225,33 @@ const formatCurrency = (value: number) =>
     style: "currency",
     currency: "USD",
   }).format(value);
+
+const getInboxItemLabel = (type: InboxItem["type"]) => {
+  if (type === "order") {
+    return "Inquiry";
+  }
+
+  if (type === "direct") {
+    return "Direct";
+  }
+
+  return "Message";
+};
+
+const getInboxItemHeading = (type: InboxItem["type"]) => {
+  if (type === "order") {
+    return "Order Inquiry";
+  }
+
+  if (type === "direct") {
+    return "Direct Message";
+  }
+
+  return "Customer Message";
+};
+
+const formatDirectPlatform = (platform: DirectMessage["platform"]) =>
+  platform.charAt(0).toUpperCase() + platform.slice(1);
 
 const calculateMargin = (price: number, cost = 0) => {
   if (price <= 0) {
@@ -314,12 +368,17 @@ const AdminPortal = () => {
     api.contactMessages.listForAdmin,
     fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip"
   );
+  const passwordDirectResult = useQuery(
+    api.directMessages.listForAdmin,
+    fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip"
+  );
   const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip");
   const productResult = useQuery(api.products.listForAdmin, fallbackKey ? { adminKey: fallbackKey } : "skip");
 
-  const passwordAccess = passwordContactResult?.access ?? passwordOrderResult?.access;
+  const passwordAccess = passwordContactResult?.access ?? passwordDirectResult?.access ?? passwordOrderResult?.access;
   const access = adminResult?.access ?? passwordAccess;
-  const isLoading = authLoading || inboxLoading || Boolean(fallbackKey && (!passwordContactResult || !passwordOrderResult));
+  const isLoading =
+    authLoading || inboxLoading || Boolean(fallbackKey && (!passwordContactResult || !passwordDirectResult || !passwordOrderResult));
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
 
@@ -355,6 +414,7 @@ const AdminPortal = () => {
 
   const inboxItems = useMemo<InboxItem[]>(() => {
     const contactMessages = isUsingPassword ? passwordContactResult?.messages : adminResult?.messages;
+    const directMessages = isUsingPassword ? passwordDirectResult?.directMessages : adminResult?.directMessages;
     const orderInquiries = isUsingPassword ? passwordOrderResult?.orders : adminResult?.orders;
 
     const messages =
@@ -367,6 +427,20 @@ const AdminPortal = () => {
         preview: message.message,
         body: message.message,
         createdAt: message.createdAt,
+      })) ?? [];
+
+    const direct =
+      directMessages?.map((message: DirectMessage) => ({
+        id: message._id,
+        type: "direct" as const,
+        customerName: message.name,
+        email: message.email,
+        phone: message.phone,
+        preview: message.message,
+        body: message.message,
+        createdAt: message.createdAt,
+        platform: message.platform,
+        handle: message.handle,
       })) ?? [];
 
     const orders =
@@ -385,8 +459,16 @@ const AdminPortal = () => {
         total: order.total,
       })) ?? [];
 
-    return [...messages, ...orders].sort((a, b) => b.createdAt - a.createdAt);
-  }, [adminResult?.messages, adminResult?.orders, isUsingPassword, passwordContactResult?.messages, passwordOrderResult?.orders]);
+    return [...messages, ...direct, ...orders].sort((a, b) => b.createdAt - a.createdAt);
+  }, [
+    adminResult?.directMessages,
+    adminResult?.messages,
+    adminResult?.orders,
+    isUsingPassword,
+    passwordContactResult?.messages,
+    passwordDirectResult?.directMessages,
+    passwordOrderResult?.orders,
+  ]);
 
   const visibleItems = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -395,7 +477,7 @@ const AdminPortal = () => {
       const matchesFilter = filter === "all" || item.type === filter;
       const matchesSearch =
         !normalizedSearch ||
-        [item.customerName, item.email, item.phone, item.preview]
+        [item.customerName, item.email, item.phone, item.preview, item.type === "direct" ? item.platform : undefined]
           .filter(Boolean)
           .some((value) => value!.toLowerCase().includes(normalizedSearch));
 
@@ -408,21 +490,22 @@ const AdminPortal = () => {
     const contactsByKey = new Map<string, CustomerContact>();
 
     inboxItems.forEach((item) => {
-      const emailKey = item.email.trim().toLowerCase();
+      const emailKey = (item.email ?? "").trim().toLowerCase();
       const phoneKey = (item.phone ?? "").replace(/\D/g, "");
       const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
-      const source = item.type === "message" ? "Message" : "Inquiry";
+      const source = getInboxItemLabel(item.type);
       const existing = contactsByKey.get(key);
 
       if (!existing) {
         contactsByKey.set(key, {
           key,
           name: item.customerName,
-          email: item.email,
+          email: item.email ?? "",
           phone: item.phone ?? "",
           sources: [source],
           lastContactAt: item.createdAt,
           totalMessages: item.type === "message" ? 1 : 0,
+          totalDirectMessages: item.type === "direct" ? 1 : 0,
           totalInquiries: item.type === "order" ? 1 : 0,
         });
         return;
@@ -434,6 +517,7 @@ const AdminPortal = () => {
 
       existing.lastContactAt = Math.max(existing.lastContactAt, item.createdAt);
       existing.totalMessages += item.type === "message" ? 1 : 0;
+      existing.totalDirectMessages += item.type === "direct" ? 1 : 0;
       existing.totalInquiries += item.type === "order" ? 1 : 0;
 
       if (!existing.phone && item.phone) {
@@ -453,21 +537,22 @@ const AdminPortal = () => {
     const profilesByKey = new Map<string, CustomerProfile>();
 
     inboxItems.forEach((item) => {
-      const emailKey = item.email.trim().toLowerCase();
+      const emailKey = (item.email ?? "").trim().toLowerCase();
       const phoneKey = (item.phone ?? "").replace(/\D/g, "");
       const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
-      const source = item.type === "message" ? "Message" : "Inquiry";
+      const source = getInboxItemLabel(item.type);
       const existing = profilesByKey.get(key);
       const profile =
         existing ??
         ({
           key,
           name: item.customerName,
-          email: item.email,
+          email: item.email ?? "",
           phone: item.phone ?? "",
           sources: [],
           lastContactAt: item.createdAt,
           totalMessages: 0,
+          totalDirectMessages: 0,
           totalInquiries: 0,
           orderCount: 0,
           lifetimeValue: 0,
@@ -500,7 +585,11 @@ const AdminPortal = () => {
         profile.lastOrderAt = Math.max(profile.lastOrderAt ?? 0, item.createdAt);
         profile.orders.push(item);
       } else {
-        profile.totalMessages += 1;
+        if (item.type === "direct") {
+          profile.totalDirectMessages += 1;
+        } else {
+          profile.totalMessages += 1;
+        }
         profile.messages.push(item);
       }
 
@@ -579,7 +668,10 @@ const AdminPortal = () => {
 
   const selectedCustomer = visibleCustomerProfiles.find((profile) => profile.key === selectedCustomerKey) ?? null;
 
-  const messageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
+  const contactMessageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
+  const directMessageCount =
+    (isUsingPassword ? passwordDirectResult?.directMessages.length : adminResult?.directMessages.length) ?? 0;
+  const messageCount = contactMessageCount + directMessageCount;
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
   const contactCount = customerContacts.length;
   const orderItems = inboxItems.filter((item) => item.type === "order");
@@ -721,6 +813,7 @@ const AdminPortal = () => {
         Phone: contact.phone || "Not provided",
         Source: contact.sources.join(" + "),
         "Message Count": contact.totalMessages,
+        "Direct Message Count": contact.totalDirectMessages,
         "Inquiry Count": contact.totalInquiries,
         "Last Contact": formatDate(contact.lastContactAt),
       }))
@@ -1051,7 +1144,7 @@ const AdminPortal = () => {
           <p className="text-sm font-semibold text-muted-foreground">Direct Messages</p>
           <Inbox className="text-cajun" size={20} />
         </div>
-        <p className="mt-3 text-3xl font-bold">0</p>
+        <p className="mt-3 text-3xl font-bold">{isUnlocked ? directMessageCount : "-"}</p>
       </div>
       <div className="border border-border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
@@ -1129,9 +1222,13 @@ const AdminPortal = () => {
                 <tr key={contact.key} className="border-b border-border last:border-b-0">
                   <td className="px-5 py-4 font-semibold text-foreground">{contact.name}</td>
                   <td className="px-5 py-4">
-                    <a className="break-words text-cajun hover:underline" href={`mailto:${contact.email}`}>
-                      {contact.email}
-                    </a>
+                    {contact.email ? (
+                      <a className="break-words text-cajun hover:underline" href={`mailto:${contact.email}`}>
+                        {contact.email}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Not provided</span>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {contact.phone ? (
@@ -1144,7 +1241,9 @@ const AdminPortal = () => {
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {contact.sources.join(" + ")}
-                    <span className="ml-2 text-xs">({contact.totalMessages + contact.totalInquiries})</span>
+                    <span className="ml-2 text-xs">
+                      ({contact.totalMessages + contact.totalDirectMessages + contact.totalInquiries})
+                    </span>
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">{formatDate(contact.lastContactAt)}</td>
                 </tr>
@@ -1539,10 +1638,6 @@ const AdminPortal = () => {
             <p className="p-5 text-sm text-muted-foreground">Loading inbox...</p>
           ) : !isUnlocked ? (
             <p className="p-5 text-sm text-muted-foreground">Unlock the portal to view messages.</p>
-          ) : filter === "direct" ? (
-            <div className="p-5 text-sm leading-relaxed text-muted-foreground">
-              Direct social messages will appear here after an inbox integration is connected.
-            </div>
           ) : visibleItems.length === 0 ? (
             <p className="p-5 text-sm text-muted-foreground">No matching messages yet.</p>
           ) : (
@@ -1558,10 +1653,12 @@ const AdminPortal = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-foreground">{item.customerName}</p>
-                    <p className="truncate text-sm text-muted-foreground">{item.email}</p>
+                    <p className="truncate text-sm text-muted-foreground">
+                      {item.email || (item.type === "direct" ? item.handle || formatDirectPlatform(item.platform) : "No email")}
+                    </p>
                   </div>
                   <span className="shrink-0 rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-semibold text-foreground">
-                    {item.type === "message" ? "Message" : "Inquiry"}
+                    {getInboxItemLabel(item.type)}
                   </span>
                 </div>
                 <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{item.preview}</p>
@@ -1586,19 +1683,21 @@ const AdminPortal = () => {
             <div className="flex flex-col gap-4 border-b border-border pb-5 md:flex-row md:items-start md:justify-between">
               <div>
                 <span className="rounded-[8px] bg-cajun/10 px-3 py-1 text-xs font-bold uppercase text-cajun">
-                  {activeItem.type === "message" ? "Customer Message" : "Order Inquiry"}
+                  {getInboxItemHeading(activeItem.type)}
                 </span>
                 <h2 className="mt-3 font-serif text-3xl font-bold text-foreground">{activeItem.customerName}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{formatDate(activeItem.createdAt)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a
-                  href={`mailto:${activeItem.email}`}
-                  className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-                >
-                  <Mail size={15} />
-                  Email
-                </a>
+                {activeItem.email && (
+                  <a
+                    href={`mailto:${activeItem.email}`}
+                    className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+                  >
+                    <Mail size={15} />
+                    Email
+                  </a>
+                )}
                 {activeItem.phone && (
                   <a
                     href={`tel:${activeItem.phone}`}
@@ -1614,15 +1713,27 @@ const AdminPortal = () => {
             <dl className="mt-5 grid gap-4 md:grid-cols-2">
               <div>
                 <dt className="text-xs font-bold uppercase text-muted-foreground">Email</dt>
-                <dd className="mt-1 break-words text-sm text-foreground">{activeItem.email}</dd>
+                <dd className="mt-1 break-words text-sm text-foreground">{activeItem.email || "Not provided"}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase text-muted-foreground">Phone</dt>
                 <dd className="mt-1 text-sm text-foreground">{activeItem.phone || "Not provided"}</dd>
               </div>
+              {activeItem.type === "direct" && (
+                <>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-muted-foreground">Platform</dt>
+                    <dd className="mt-1 text-sm text-foreground">{formatDirectPlatform(activeItem.platform)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-bold uppercase text-muted-foreground">Handle</dt>
+                    <dd className="mt-1 text-sm text-foreground">{activeItem.handle || "Not provided"}</dd>
+                  </div>
+                </>
+              )}
             </dl>
 
-            {activeItem.type === "message" ? (
+            {activeItem.type !== "order" ? (
               <div className="mt-6">
                 <h3 className="font-serif text-xl font-bold">Message</h3>
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-foreground">{activeItem.body}</p>

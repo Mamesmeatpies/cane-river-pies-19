@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { CreditCard, Minus, Phone, Plus, ShoppingCart, Trash2, X, Send } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ const STRIPE_CHECKOUT_ENABLED = false;
 const CartDrawer = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, isOpen, setIsOpen } = useCart();
   const createOrder = useMutation(api.orders.create);
+  const submitOrder = useAction(api.notifications.submitOrder);
   const [showCheckout, setShowCheckout] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -37,18 +38,26 @@ const CartDrawer = () => {
   };
 
   const submitEmailOrder = async () => {
-    await saveOrder("email");
+    const result = await submitOrder({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      notes: form.notes.trim() || undefined,
+      items: items.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        unitPrice: item.priceNum,
+        quantity: item.quantity,
+        lineTotal: item.priceNum * item.quantity,
+      })),
+      total: totalPrice,
+    });
 
-    const orderLines = items
-      .map((i) => `${i.name} x${i.quantity} - $${(i.priceNum * i.quantity).toFixed(2)}`)
-      .join("\n");
-
-    const body = `New Order from ${form.name}\nEmail: ${form.email}\nPhone: ${form.phone}\n\nItems:\n${orderLines}\n\nTotal: $${totalPrice.toFixed(2)}\n\nNotes: ${form.notes || "None"}`;
-
-    const mailtoLink = `mailto:mamesmeatpies@gmail.com?subject=${encodeURIComponent("New Mame's Meat Pie Order")}&body=${encodeURIComponent(body)}`;
-    window.open(mailtoLink, "_blank");
-
-    toast.success("Order submitted! Check your email app to send.");
+    toast.success(
+      result.notificationSent
+        ? "Order submitted! We'll be in touch soon."
+        : "Order saved! We'll follow up from the admin inbox."
+    );
     clearCart();
     setShowCheckout(false);
     setForm({ name: "", email: "", phone: "", notes: "" });

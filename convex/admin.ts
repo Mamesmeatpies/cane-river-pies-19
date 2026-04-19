@@ -100,13 +100,15 @@ export const getInboxForAdmin = action({
           access: auth.access,
           user: auth.user,
           messages: [],
+          directMessages: [],
           orders: [],
         };
       }
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
-      const [messages, orders] = await Promise.all([
+      const [messages, directMessages, orders] = await Promise.all([
         ctx.runQuery(internal.contactMessages.listLatestInternal, { limit }),
+        ctx.runQuery(internal.directMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.orders.listLatestInternal, { limit }),
       ]);
 
@@ -114,6 +116,7 @@ export const getInboxForAdmin = action({
         access: auth.access,
         user: auth.user,
         messages,
+        directMessages,
         orders,
       };
     } catch {
@@ -121,6 +124,7 @@ export const getInboxForAdmin = action({
         access: "denied" as const,
         user: null,
         messages: [],
+        directMessages: [],
         orders: [],
       };
     }

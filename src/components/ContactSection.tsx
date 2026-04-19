@@ -18,13 +18,16 @@ const ContactSection = () => {
     setSubmitting(true);
 
     try {
-      await submitContactMessage({
+      const result = await submitContactMessage({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
         message: form.message.trim(),
       });
-      toast({ title: "Message Sent!", description: "We'll get back to you soon." });
+      toast({
+        title: "Message saved!",
+        description: result.notificationSent ? "We'll get back to you soon." : "We'll follow up from the admin inbox.",
+      });
       setForm({ name: "", email: "", phone: "", message: "" });
     } catch {
       toast({

@@ -9,6 +9,15 @@ export default defineSchema({
     message: v.string(),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
+  directMessages: defineTable({
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    platform: v.union(v.literal("instagram"), v.literal("facebook"), v.literal("website"), v.literal("other")),
+    handle: v.optional(v.string()),
+    message: v.string(),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
   newsletterSubscribers: defineTable({
     email: v.string(),
     source: v.string(),

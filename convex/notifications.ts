@@ -12,6 +12,13 @@ const orderItemValidator = v.object({
   lineTotal: v.number(),
 });
 
+const directMessagePlatformValidator = v.union(
+  v.literal("instagram"),
+  v.literal("facebook"),
+  v.literal("website"),
+  v.literal("other")
+);
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, "&amp;")
@@ -62,6 +69,16 @@ const sendResendEmail = async ({
   }
 };
 
+const trySendResendEmail = async (email: Parameters<typeof sendResendEmail>[0]) => {
+  try {
+    await sendResendEmail(email);
+    return true;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};
+
 export const submitContactMessage = action({
   args: {
     name: v.string(),
@@ -73,7 +90,7 @@ export const submitContactMessage = action({
     const messageId = await ctx.runMutation(api.contactMessages.create, args);
     const phone = args.phone ?? "Not provided";
 
-    await sendResendEmail({
+    const notificationSent = await trySendResendEmail({
       subject: `New contact message from ${args.name}`,
       replyTo: args.email,
       text: [
@@ -86,7 +103,37 @@ export const submitContactMessage = action({
       ].join("\n"),
     });
 
-    return { messageId };
+    return { messageId, notificationSent };
+  },
+});
+
+export const submitDirectMessage = action({
+  args: {
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    platform: directMessagePlatformValidator,
+    handle: v.optional(v.string()),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const directMessageId = await ctx.runMutation(api.directMessages.create, args);
+    const notificationSent = await trySendResendEmail({
+      subject: `New direct message from ${args.name}`,
+      replyTo: args.email ?? notificationEmail,
+      text: [
+        `New direct message from ${args.name}`,
+        `Platform: ${args.platform}`,
+        `Handle: ${args.handle ?? "Not provided"}`,
+        `Email: ${args.email ?? "Not provided"}`,
+        `Phone: ${args.phone ?? "Not provided"}`,
+        "",
+        "Message:",
+        args.message,
+      ].join("\n"),
+    });
+
+    return { directMessageId, notificationSent };
   },
 });
 
@@ -100,15 +147,15 @@ export const submitNewsletterSignup = action({
       source: "contact-section",
     });
 
-    if (!result.alreadySubscribed) {
-      await sendResendEmail({
-        subject: "New Mame's email list signup",
-        replyTo: args.email,
-        text: ["New email list signup", `Email: ${args.email}`].join("\n"),
-      });
-    }
+    const notificationSent = result.alreadySubscribed
+      ? false
+      : await trySendResendEmail({
+          subject: "New Mame's email list signup",
+          replyTo: args.email,
+          text: [`New email list signup`, `Email: ${args.email}`].join("\n"),
+        });
 
-    return result;
+    return { ...result, notificationSent };
   },
 });
 
@@ -137,7 +184,7 @@ export const submitOrder = action({
       )
       .join("\n");
 
-    await sendResendEmail({
+    const notificationSent = await trySendResendEmail({
       subject: `New Mame's Meat Pie order from ${args.name}`,
       replyTo: args.email,
       text: [
@@ -154,6 +201,6 @@ export const submitOrder = action({
       ].join("\n"),
     });
 
-    return { orderId };
+    return { orderId, notificationSent };
   },
 });
