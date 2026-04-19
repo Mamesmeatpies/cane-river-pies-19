@@ -22,9 +22,13 @@ const productFields = {
   description: v.string(),
   category: v.string(),
   price: v.number(),
+  cost: v.optional(v.number()),
   stock: v.number(),
+  inventoryThreshold: v.optional(v.number()),
   status: v.union(v.literal("active"), v.literal("draft"), v.literal("low_stock")),
+  variants: v.optional(v.array(v.string())),
   imageKey: v.string(),
+  imageUploadName: v.optional(v.string()),
 };
 
 const defaultProducts = [
@@ -35,8 +39,11 @@ const defaultProducts = [
     description: "Our classic Cane River recipe with premium seasoned beef and pork in a golden, flaky crust.",
     category: "Full Size",
     price: 30,
+    cost: 14,
     stock: 48,
+    inventoryThreshold: 12,
     status: "active" as const,
+    variants: ["Full Size", "Beef & Pork"],
     imageKey: "beef-pork",
   },
   {
@@ -46,8 +53,11 @@ const defaultProducts = [
     description: "The classic turned up with Cajun heat - bold spices wrapped in golden pastry perfection.",
     category: "Full Size",
     price: 30,
+    cost: 14,
     stock: 22,
+    inventoryThreshold: 12,
     status: "active" as const,
+    variants: ["Full Size", "Spicy"],
     imageKey: "spicy",
   },
   {
@@ -57,8 +67,11 @@ const defaultProducts = [
     description: "A lighter twist on tradition - seasoned turkey in a handcrafted flaky crust.",
     category: "Full Size",
     price: 30,
+    cost: 13,
     stock: 16,
+    inventoryThreshold: 12,
     status: "active" as const,
+    variants: ["Full Size", "Turkey"],
     imageKey: "turkey",
   },
   {
@@ -68,8 +81,11 @@ const defaultProducts = [
     description: "Bite-sized perfection - sold in packs of 12. Ideal for parties, events, and snacking.",
     category: "Mini - Pack of 12",
     price: 20,
+    cost: 9,
     stock: 8,
+    inventoryThreshold: 10,
     status: "low_stock" as const,
+    variants: ["Mini", "Beef & Pork"],
     imageKey: "mini",
   },
 ];
@@ -202,6 +218,17 @@ export const seedDefaultProducts = mutation({
           updatedAt: now,
         });
         seeded += 1;
+      } else if (
+        existing.cost === undefined ||
+        existing.inventoryThreshold === undefined ||
+        existing.variants === undefined
+      ) {
+        await ctx.db.patch(existing._id, {
+          cost: existing.cost ?? product.cost,
+          inventoryThreshold: existing.inventoryThreshold ?? product.inventoryThreshold,
+          variants: existing.variants ?? product.variants,
+          updatedAt: Date.now(),
+        });
       }
     }
 

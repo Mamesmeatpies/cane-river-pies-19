@@ -24,6 +24,7 @@ import {
   ShoppingBag,
   Tag,
   Truck,
+  Upload,
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -118,9 +119,13 @@ type AdminProduct = {
   description: string;
   category: string;
   price: number;
+  cost?: number;
   stock: number;
+  inventoryThreshold?: number;
   status: ProductStatus;
+  variants?: string[];
   imageKey: string;
+  imageUploadName?: string;
 };
 
 type AdminInboxResult = {
@@ -159,9 +164,13 @@ const emptyProductForm: AdminProduct = {
   description: "",
   category: "Full Size",
   price: 0,
+  cost: 0,
   stock: 0,
+  inventoryThreshold: 10,
   status: "draft",
+  variants: [],
   imageKey: "beef-pork",
+  imageUploadName: "",
 };
 
 const formatDate = (timestamp: number) =>
@@ -175,6 +184,30 @@ const formatCurrency = (value: number) =>
     style: "currency",
     currency: "USD",
   }).format(value);
+
+const calculateMargin = (price: number, cost = 0) => {
+  if (price <= 0) {
+    return 0;
+  }
+
+  return ((price - cost) / price) * 100;
+};
+
+const formatMargin = (price: number, cost = 0) => `${Math.round(calculateMargin(price, cost))}%`;
+
+const getInventoryStatus = (product: AdminProduct) => {
+  const threshold = product.inventoryThreshold ?? 10;
+
+  if (product.stock <= threshold || product.status === "low_stock") {
+    return "Low Stock";
+  }
+
+  if (product.status === "draft") {
+    return "Draft";
+  }
+
+  return "Healthy";
+};
 
 const escapeCsvValue = (value: string | number) => {
   const stringValue = String(value);
@@ -426,7 +459,10 @@ const AdminPortal = () => {
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
   const recentOrders = orderItems.slice(0, 5);
   const adminProductRows = (productResult?.products ?? []) as AdminProduct[];
-  const lowStockAlerts = adminProductRows.filter((product) => product.status === "low_stock" || product.stock <= 10).length;
+  const lowStockProducts = adminProductRows.filter(
+    (product) => product.status === "low_stock" || product.stock <= (product.inventoryThreshold ?? 10)
+  );
+  const lowStockAlerts = lowStockProducts.length;
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -528,7 +564,7 @@ const AdminPortal = () => {
     );
   };
 
-  const updateProductForm = (field: keyof AdminProduct, value: string | number) => {
+  const updateProductForm = (field: keyof AdminProduct, value: string | number | string[]) => {
     setProductForm((current) => ({
       ...current,
       [field]: value,
@@ -551,9 +587,13 @@ const AdminPortal = () => {
       description: productForm.description.trim(),
       category: productForm.category.trim(),
       price: Number(productForm.price),
+      cost: Number(productForm.cost ?? 0),
       stock: Number(productForm.stock),
+      inventoryThreshold: Number(productForm.inventoryThreshold ?? 10),
       status: productForm.status,
+      variants: productForm.variants?.map((variant) => variant.trim()).filter(Boolean) ?? [],
       imageKey: productForm.imageKey.trim(),
+      imageUploadName: productForm.imageUploadName?.trim() || undefined,
     };
 
     if (!productPayload.productId || !productPayload.name || !productPayload.sku) {
@@ -1195,7 +1235,9 @@ const AdminPortal = () => {
       <div className="flex flex-col gap-3 border border-border bg-card p-5 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="font-serif text-2xl font-bold text-foreground">Products</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Manage storefront products, pricing, stock, and availability.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage product details, pricing, cost, margins, variants, images, and linked inventory.
+          </p>
         </div>
         <button
           type="button"
@@ -1211,16 +1253,215 @@ const AdminPortal = () => {
         </button>
       </div>
 
+      <form onSubmit={handleProductSubmit} className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="font-serif text-xl font-bold text-foreground">
+              {selectedProduct ? `Editing ${selectedProduct.name}` : "Product Details"}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Margin is calculated from the current price and cost.
+            </p>
+          </div>
+          <div className="border border-border bg-background p-3 text-sm">
+            <p className="text-xs font-bold uppercase text-muted-foreground">Margin</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">
+              {formatMargin(Number(productForm.price), Number(productForm.cost ?? 0))}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Product Name
+            <input
+              value={productForm.name}
+              onChange={(event) => updateProductForm("name", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Beef & Pork Meat Pie"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Product ID
+            <input
+              value={productForm.productId}
+              onChange={(event) => updateProductForm("productId", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="beef-pork"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground md:col-span-2">
+            Description
+            <textarea
+              value={productForm.description}
+              onChange={(event) => updateProductForm("description", event.target.value)}
+              className="min-h-24 rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Product description"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Price
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={productForm.price}
+              onChange={(event) => updateProductForm("price", Number(event.target.value))}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Cost
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={productForm.cost ?? 0}
+              onChange={(event) => updateProductForm("cost", Number(event.target.value))}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            SKU
+            <input
+              value={productForm.sku}
+              onChange={(event) => updateProductForm("sku", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="MAME-BP-DOZ"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Category
+            <input
+              value={productForm.category}
+              onChange={(event) => updateProductForm("category", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Full Size"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground md:col-span-2">
+            Variants (Size / Flavor)
+            <input
+              value={(productForm.variants ?? []).join(", ")}
+              onChange={(event) =>
+                updateProductForm(
+                  "variants",
+                  event.target.value
+                    .split(",")
+                    .map((variant) => variant.trim())
+                    .filter(Boolean)
+                )
+              }
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              placeholder="Full Size, Beef & Pork"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Storefront Image
+            <select
+              value={productForm.imageKey}
+              onChange={(event) => updateProductForm("imageKey", event.target.value)}
+              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+            >
+              <option value="beef-pork">Beef & Pork</option>
+              <option value="spicy">Spicy</option>
+              <option value="turkey">Turkey</option>
+              <option value="mini">Mini Pies</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Images Upload
+            <span className="flex items-center gap-2 rounded-[8px] border border-dashed border-border bg-background px-3 py-2 font-normal text-muted-foreground">
+              <Upload size={16} />
+              <span className="truncate">{productForm.imageUploadName || "Choose image file"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => updateProductForm("imageUploadName", event.target.files?.[0]?.name ?? "")}
+                className="sr-only"
+              />
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-6 border border-border bg-background p-4">
+          <div className="flex flex-col gap-1">
+            <h4 className="font-serif text-lg font-bold text-foreground">Inventory Linked</h4>
+            <p className="text-sm text-muted-foreground">Stock and threshold feed the Inventory tab and dashboard alerts.</p>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2 text-sm font-semibold text-foreground">
+              Stock
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={productForm.stock}
+                onChange={(event) => updateProductForm("stock", Number(event.target.value))}
+                className="rounded-[8px] border border-border bg-card px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-foreground">
+              Threshold
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={productForm.inventoryThreshold ?? 10}
+                onChange={(event) => updateProductForm("inventoryThreshold", Number(event.target.value))}
+                className="rounded-[8px] border border-border bg-card px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-foreground">
+              Status
+              <select
+                value={productForm.status}
+                onChange={(event) => updateProductForm("status", event.target.value as ProductStatus)}
+                className="rounded-[8px] border border-border bg-card px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+              >
+                <option value="active">Active</option>
+                <option value="low_stock">Low Stock</option>
+                <option value="draft">Draft</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {productNotice && <p className="mt-4 text-sm font-semibold text-cajun">{productNotice}</p>}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={productSaving || !fallbackKey}
+            className="rounded-[8px] bg-cajun px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {productSaving ? "Saving..." : "Save Product"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedProductId(null);
+              setProductForm(emptyProductForm);
+              setProductNotice(null);
+            }}
+            className="rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+          >
+            Clear
+          </button>
+        </div>
+      </form>
+
       <div className="overflow-x-auto border border-border bg-card">
         <div className="border-b border-border p-5">
           <h3 className="font-serif text-xl font-bold text-foreground">Product List</h3>
         </div>
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
             <tr>
               <th className="px-5 py-3">Name</th>
               <th className="px-5 py-3">SKU</th>
               <th className="px-5 py-3">Price</th>
+              <th className="px-5 py-3">Cost</th>
+              <th className="px-5 py-3">Margin</th>
               <th className="px-5 py-3">Stock</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Edit</th>
@@ -1229,19 +1470,19 @@ const AdminPortal = () => {
           <tbody>
             {!fallbackKey ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={8}>
                   Unlock with the admin password to manage products.
                 </td>
               </tr>
             ) : productResult === undefined ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={8}>
                   Loading products...
                 </td>
               </tr>
             ) : visibleProducts.length === 0 ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={8}>
                   No products match that search.
                 </td>
               </tr>
@@ -1251,18 +1492,20 @@ const AdminPortal = () => {
                   <td className="px-5 py-4 font-semibold text-foreground">{product.name}</td>
                   <td className="px-5 py-4 text-muted-foreground">{product.sku}</td>
                   <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(product.price)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatCurrency(product.cost ?? 0)}</td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{formatMargin(product.price, product.cost ?? 0)}</td>
                   <td className="px-5 py-4 text-muted-foreground">{product.stock}</td>
                   <td className="px-5 py-4">
                     <span
                       className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${
-                        product.status === "active"
+                        getInventoryStatus(product) === "Healthy"
                           ? "bg-green-100 text-green-800"
-                          : product.status === "low_stock"
-                            ? "bg-gold/20 text-foreground"
+                          : getInventoryStatus(product) === "Low Stock"
+                            ? "bg-red-100 text-red-800"
                             : "bg-muted text-muted-foreground"
                       }`}
                     >
-                      {product.status === "low_stock" ? "Low Stock" : product.status}
+                      {getInventoryStatus(product)}
                     </span>
                   </td>
                   <td className="px-5 py-4">
@@ -1284,125 +1527,102 @@ const AdminPortal = () => {
           </tbody>
         </table>
       </div>
+    </div>
+  );
 
-      <form onSubmit={handleProductSubmit} className="border border-border bg-card p-5">
-        <h3 className="font-serif text-xl font-bold text-foreground">{selectedProduct ? `Editing ${selectedProduct.name}` : "Add Product"}</h3>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Product ID
-            <input
-              value={productForm.productId}
-              onChange={(event) => updateProductForm("productId", event.target.value)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-              placeholder="beef-pork"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Name
-            <input
-              value={productForm.name}
-              onChange={(event) => updateProductForm("name", event.target.value)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-              placeholder="Beef & Pork Meat Pie"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            SKU
-            <input
-              value={productForm.sku}
-              onChange={(event) => updateProductForm("sku", event.target.value)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-              placeholder="MAME-BP-DOZ"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Category
-            <input
-              value={productForm.category}
-              onChange={(event) => updateProductForm("category", event.target.value)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-              placeholder="Full Size"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Price
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={productForm.price}
-              onChange={(event) => updateProductForm("price", Number(event.target.value))}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Stock
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={productForm.stock}
-              onChange={(event) => updateProductForm("stock", Number(event.target.value))}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Status
-            <select
-              value={productForm.status}
-              onChange={(event) => updateProductForm("status", event.target.value as ProductStatus)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-            >
-              <option value="active">Active</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="draft">Draft</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground">
-            Image
-            <select
-              value={productForm.imageKey}
-              onChange={(event) => updateProductForm("imageKey", event.target.value)}
-              className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-            >
-              <option value="beef-pork">Beef & Pork</option>
-              <option value="spicy">Spicy</option>
-              <option value="turkey">Turkey</option>
-              <option value="mini">Mini Pies</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-foreground md:col-span-2">
-            Description
-            <textarea
-              value={productForm.description}
-              onChange={(event) => updateProductForm("description", event.target.value)}
-              className="min-h-24 rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
-              placeholder="Product description"
-            />
-          </label>
+  const inventoryPanel = (
+    <div className="space-y-6">
+      <div className="border border-border bg-card p-5">
+        <h2 className="font-serif text-2xl font-bold text-foreground">Inventory</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Stock thresholds are linked to each product and highlighted when inventory runs low.
+        </p>
+      </div>
+
+      <div className="overflow-x-auto border border-border bg-card">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">SKU</th>
+              <th className="px-5 py-3">Product</th>
+              <th className="px-5 py-3">Stock</th>
+              <th className="px-5 py-3">Threshold</th>
+              <th className="px-5 py-3">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!fallbackKey ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  Unlock with the admin password to review inventory.
+                </td>
+              </tr>
+            ) : productResult === undefined ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  Loading inventory...
+                </td>
+              </tr>
+            ) : visibleProducts.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  No inventory rows match that search.
+                </td>
+              </tr>
+            ) : (
+              visibleProducts.map((product) => {
+                const status = getInventoryStatus(product);
+                const isLowStock = status === "Low Stock";
+
+                return (
+                  <tr
+                    key={product._id ?? product.productId}
+                    className={`border-b border-border last:border-b-0 ${isLowStock ? "bg-red-50" : ""}`}
+                  >
+                    <td className="px-5 py-4 font-semibold text-foreground">{product.sku}</td>
+                    <td className="px-5 py-4 text-foreground">{product.name}</td>
+                    <td className={`px-5 py-4 font-semibold ${isLowStock ? "text-red-800" : "text-foreground"}`}>{product.stock}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{product.inventoryThreshold ?? 10}</td>
+                    <td className="px-5 py-4">
+                      <span
+                        className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${
+                          isLowStock ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                        }`}
+                      >
+                        {status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {lowStockProducts.length > 0 && (
+        <div className="border border-red-200 bg-red-50 p-5">
+          <h3 className="font-serif text-xl font-bold text-red-900">Alerts: Highlight Low Stock</h3>
+          <div className="mt-3 grid gap-2">
+            {lowStockProducts.map((product) => (
+              <button
+                key={product._id ?? product.productId}
+                type="button"
+                onClick={() => {
+                  setActivePage("products");
+                  setSelectedProductId(product._id ?? null);
+                }}
+                className="flex flex-col gap-1 rounded-[8px] border border-red-200 bg-card p-3 text-left text-sm transition-colors hover:bg-red-100 md:flex-row md:items-center md:justify-between"
+              >
+                <span className="font-semibold text-red-900">{product.name}</span>
+                <span className="text-red-800">
+                  {product.stock} in stock, threshold {product.inventoryThreshold ?? 10}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-        {productNotice && <p className="mt-4 text-sm font-semibold text-cajun">{productNotice}</p>}
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={productSaving || !fallbackKey}
-            className="rounded-[8px] bg-cajun px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {productSaving ? "Saving..." : selectedProduct ? "Save Product" : "Create Product"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedProductId(null);
-              setProductForm(emptyProductForm);
-              setProductNotice(null);
-            }}
-            className="rounded-[8px] border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-          >
-            Clear
-          </button>
-        </div>
-      </form>
+      )}
     </div>
   );
 
@@ -1420,6 +1640,10 @@ const AdminPortal = () => {
 
     if (activePage === "products") {
       return productsPanel;
+    }
+
+    if (activePage === "inventory") {
+      return inventoryPanel;
     }
 
     if (activePage === "customers") {

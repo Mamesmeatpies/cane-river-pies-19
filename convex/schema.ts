@@ -35,9 +35,13 @@ export default defineSchema({
     description: v.string(),
     category: v.string(),
     price: v.number(),
+    cost: v.optional(v.number()),
     stock: v.number(),
+    inventoryThreshold: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("draft"), v.literal("low_stock")),
+    variants: v.optional(v.array(v.string())),
     imageKey: v.string(),
+    imageUploadName: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
