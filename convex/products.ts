@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const getAdminAccess = (adminKey: string) => {
@@ -121,6 +121,15 @@ export const listForAdmin = query({
       access,
       products: products.sort((a, b) => a.createdAt - b.createdAt),
     };
+  },
+});
+
+export const listAllInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("products").collect();
+
+    return products.sort((a, b) => a.createdAt - b.createdAt);
   },
 });
 

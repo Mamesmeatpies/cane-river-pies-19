@@ -180,6 +180,7 @@ type AdminInboxResult = {
   messages: ContactMessage[];
   directMessages: DirectMessage[];
   orders: Order[];
+  products: AdminProduct[];
   analytics: AnalyticsSummary | null;
 };
 
@@ -404,12 +405,18 @@ const AdminPortal = () => {
   );
 
   const passwordAccess =
-    passwordContactResult?.access ?? passwordDirectResult?.access ?? passwordOrderResult?.access ?? passwordAnalyticsResult?.access;
+    passwordContactResult?.access ??
+    passwordDirectResult?.access ??
+    passwordOrderResult?.access ??
+    productResult?.access ??
+    passwordAnalyticsResult?.access;
   const access = adminResult?.access ?? passwordAccess;
   const isLoading =
     authLoading ||
     inboxLoading ||
-    Boolean(fallbackKey && (!passwordContactResult || !passwordDirectResult || !passwordOrderResult || !passwordAnalyticsResult));
+    Boolean(
+      fallbackKey && (!passwordContactResult || !passwordDirectResult || !passwordOrderResult || !productResult || !passwordAnalyticsResult)
+    );
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
 
@@ -438,10 +445,24 @@ const AdminPortal = () => {
   }, [loadInbox]);
 
   useEffect(() => {
-    const selectedProduct = productResult?.products.find((product: AdminProduct) => product._id === selectedProductId);
+    const productRows = isUsingPassword ? productResult?.products : adminResult?.products;
+    const selectedProduct = productRows?.find((product: AdminProduct) => product._id === selectedProductId);
 
     setProductForm(selectedProduct ?? emptyProductForm);
-  }, [productResult?.products, selectedProductId]);
+  }, [adminResult?.products, isUsingPassword, productResult?.products, selectedProductId]);
+
+  useEffect(() => {
+    if (!isUsingPassword || passwordAccess !== "denied") {
+      return;
+    }
+
+    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+    setFallbackInput("");
+    setFallbackKey("");
+    setSelectedId(null);
+    setSelectedProductId(null);
+    setProductNotice("Enter the current admin password to view inventory levels.");
+  }, [isUsingPassword, passwordAccess]);
 
   const inboxItems = useMemo<InboxItem[]>(() => {
     const contactMessages = isUsingPassword ? passwordContactResult?.messages : adminResult?.messages;
@@ -712,7 +733,10 @@ const AdminPortal = () => {
   const todayRevenue = todayOrderItems.reduce((sum, item) => sum + item.total, 0);
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
   const recentOrders = orderItems.slice(0, 5);
-  const adminProductRows = useMemo(() => (productResult?.products ?? []) as AdminProduct[], [productResult?.products]);
+  const adminProductRows = useMemo(
+    () => ((isUsingPassword ? productResult?.products : adminResult?.products) ?? []) as AdminProduct[],
+    [adminResult?.products, isUsingPassword, productResult?.products]
+  );
   const lowStockProducts = adminProductRows.filter(
     (product) => product.status === "low_stock" || product.stock <= (product.inventoryThreshold ?? 10)
   );
@@ -2215,13 +2239,13 @@ const AdminPortal = () => {
             </tr>
           </thead>
           <tbody>
-            {!fallbackKey ? (
+            {!isUnlocked ? (
               <tr>
                 <td className="px-5 py-5 text-muted-foreground" colSpan={8}>
-                  Unlock with the admin password to manage products.
+                  Unlock the portal to manage products.
                 </td>
               </tr>
-            ) : productResult === undefined ? (
+            ) : isUsingPassword && productResult === undefined ? (
               <tr>
                 <td className="px-5 py-5 text-muted-foreground" colSpan={8}>
                   Loading products...
@@ -2298,13 +2322,13 @@ const AdminPortal = () => {
             </tr>
           </thead>
           <tbody>
-            {!fallbackKey ? (
+            {!isUnlocked ? (
               <tr>
                 <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
-                  Unlock with the admin password to review inventory.
+                  Unlock the portal to review inventory.
                 </td>
               </tr>
-            ) : productResult === undefined ? (
+            ) : isUsingPassword && productResult === undefined ? (
               <tr>
                 <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
                   Loading inventory...
@@ -2418,8 +2442,8 @@ const AdminPortal = () => {
 
     return (
       <div className="space-y-6">
-        {analyticsPanel}
         {dashboardOverviewPanel}
+        {analyticsPanel}
         {metricsPanel}
         {customerDatabasePanel}
         {inboxWorkspace}
