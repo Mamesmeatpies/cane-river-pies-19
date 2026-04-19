@@ -61,7 +61,7 @@ export const listForAdmin = query({
       };
     }
 
-    const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
+    const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
     const orders = await ctx.db
       .query("orders")
       .withIndex("by_createdAt")
@@ -80,7 +80,7 @@ export const listLatestInternal = internalQuery({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
+    const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
 
     return await ctx.db
       .query("orders")

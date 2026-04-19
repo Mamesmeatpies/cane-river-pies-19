@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
 import { useAction, useQuery } from "convex/react";
-import { ArrowLeft, Inbox, Lock, Mail, MessageSquare, PackageCheck, Phone, Search } from "lucide-react";
+import { ArrowLeft, Download, Inbox, Lock, Mail, MessageSquare, PackageCheck, Phone, Search, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 
@@ -61,6 +61,17 @@ type InboxItem =
 
 type Filter = "all" | "message" | "order" | "direct";
 
+type CustomerContact = {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+  sources: Array<"Message" | "Inquiry">;
+  lastContactAt: number;
+  totalMessages: number;
+  totalInquiries: number;
+};
+
 type AdminInboxResult = {
   access: "granted" | "denied" | "missing";
   user: {
@@ -88,6 +99,33 @@ const formatCurrency = (value: number) =>
     style: "currency",
     currency: "USD",
   }).format(value);
+
+const escapeCsvValue = (value: string | number) => {
+  const stringValue = String(value);
+  return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
+};
+
+const downloadCsv = (filename: string, rows: Array<Record<string, string | number>>) => {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const csv = [
+    headers.map(escapeCsvValue).join(","),
+    ...rows.map((row) => headers.map((header) => escapeCsvValue(row[header] ?? "")).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
 
 const getStoredAdminKey = () => {
   if (typeof window === "undefined") {
@@ -142,9 +180,9 @@ const AdminPortal = () => {
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
-    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+    fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip"
   );
-  const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip");
+  const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip");
 
   const passwordAccess = passwordContactResult?.access ?? passwordOrderResult?.access;
   const access = adminResult?.access ?? passwordAccess;
@@ -162,7 +200,7 @@ const AdminPortal = () => {
 
     try {
       const accessToken = await getAccessToken();
-      const result = await getInboxForAdmin({ accessToken, limit: 100 });
+      const result = await getInboxForAdmin({ accessToken, limit: 1000 });
       setAdminResult(result as AdminInboxResult);
     } catch {
       setInboxError("Could not load the admin inbox. Please sign in again.");
@@ -227,9 +265,83 @@ const AdminPortal = () => {
   }, [filter, inboxItems, search]);
 
   const activeItem = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null;
+  const customerContacts = useMemo<CustomerContact[]>(() => {
+    const contactsByKey = new Map<string, CustomerContact>();
+
+    inboxItems.forEach((item) => {
+      const emailKey = item.email.trim().toLowerCase();
+      const phoneKey = (item.phone ?? "").replace(/\D/g, "");
+      const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
+      const source = item.type === "message" ? "Message" : "Inquiry";
+      const existing = contactsByKey.get(key);
+
+      if (!existing) {
+        contactsByKey.set(key, {
+          key,
+          name: item.customerName,
+          email: item.email,
+          phone: item.phone ?? "",
+          sources: [source],
+          lastContactAt: item.createdAt,
+          totalMessages: item.type === "message" ? 1 : 0,
+          totalInquiries: item.type === "order" ? 1 : 0,
+        });
+        return;
+      }
+
+      if (!existing.sources.includes(source)) {
+        existing.sources.push(source);
+      }
+
+      existing.lastContactAt = Math.max(existing.lastContactAt, item.createdAt);
+      existing.totalMessages += item.type === "message" ? 1 : 0;
+      existing.totalInquiries += item.type === "order" ? 1 : 0;
+
+      if (!existing.phone && item.phone) {
+        existing.phone = item.phone;
+      }
+
+      if (item.createdAt >= existing.lastContactAt) {
+        existing.name = item.customerName || existing.name;
+        existing.email = item.email || existing.email;
+      }
+    });
+
+    return Array.from(contactsByKey.values()).sort((a, b) => b.lastContactAt - a.lastContactAt);
+  }, [inboxItems]);
+
+  const visibleContacts = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return customerContacts;
+    }
+
+    return customerContacts.filter((contact) =>
+      [contact.name, contact.email, contact.phone, contact.sources.join(" ")]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch))
+    );
+  }, [customerContacts, search]);
 
   const messageCount = (isUsingPassword ? passwordContactResult?.messages.length : adminResult?.messages.length) ?? 0;
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
+  const contactCount = customerContacts.length;
+
+  const handleDownloadContacts = (contacts: CustomerContact[]) => {
+    downloadCsv(
+      `mames-customer-contacts-${new Date().toISOString().slice(0, 10)}.csv`,
+      contacts.map((contact) => ({
+        Name: contact.name,
+        Email: contact.email,
+        Phone: contact.phone || "Not provided",
+        Source: contact.sources.join(" + "),
+        "Message Count": contact.totalMessages,
+        "Inquiry Count": contact.totalInquiries,
+        "Last Contact": formatDate(contact.lastContactAt),
+      }))
+    );
+  };
 
   const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -369,7 +481,7 @@ const AdminPortal = () => {
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="border border-border bg-card p-5">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-muted-foreground">Customer Messages</p>
@@ -390,6 +502,106 @@ const AdminPortal = () => {
                 <Inbox className="text-cajun" size={20} />
               </div>
               <p className="mt-3 text-3xl font-bold">0</p>
+            </div>
+            <div className="border border-border bg-card p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-muted-foreground">Saved Contacts</p>
+                <Users className="text-cajun" size={20} />
+              </div>
+              <p className="mt-3 text-3xl font-bold">{isUnlocked ? contactCount : "-"}</p>
+            </div>
+          </div>
+
+          <div className="mt-8 border border-border bg-card">
+            <div className="flex flex-col gap-4 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="font-serif text-2xl font-bold text-foreground">Customer Database</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Names, phone numbers, and emails collected from messages and order inquiries.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadContacts(visibleContacts)}
+                  disabled={!isUnlocked || visibleContacts.length === 0}
+                  className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={15} />
+                  Download shown
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadContacts(customerContacts)}
+                  disabled={!isUnlocked || customerContacts.length === 0}
+                  className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download size={15} />
+                  Download all
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="border-b border-border bg-background text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Email</th>
+                    <th className="px-5 py-3">Phone</th>
+                    <th className="px-5 py-3">Source</th>
+                    <th className="px-5 py-3">Last Contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                        Loading contacts...
+                      </td>
+                    </tr>
+                  ) : !isUnlocked ? (
+                    <tr>
+                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                        Unlock the portal to review customer contacts.
+                      </td>
+                    </tr>
+                  ) : visibleContacts.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                        No saved contacts match that search.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleContacts.map((contact) => (
+                      <tr key={contact.key} className="border-b border-border last:border-b-0">
+                        <td className="px-5 py-4 font-semibold text-foreground">{contact.name}</td>
+                        <td className="px-5 py-4">
+                          <a className="break-words text-cajun hover:underline" href={`mailto:${contact.email}`}>
+                            {contact.email}
+                          </a>
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground">
+                          {contact.phone ? (
+                            <a className="text-foreground hover:underline" href={`tel:${contact.phone}`}>
+                              {contact.phone}
+                            </a>
+                          ) : (
+                            "Not provided"
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground">
+                          {contact.sources.join(" + ")}
+                          <span className="ml-2 text-xs">
+                            ({contact.totalMessages + contact.totalInquiries})
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-muted-foreground">{formatDate(contact.lastContactAt)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
