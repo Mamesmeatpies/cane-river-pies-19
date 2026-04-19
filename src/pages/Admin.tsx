@@ -3,9 +3,11 @@ import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
 import { useAction, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  AlertTriangle,
   BarChart3,
   Boxes,
   CalendarDays,
+  DollarSign,
   Download,
   Inbox,
   LayoutDashboard,
@@ -15,9 +17,11 @@ import {
   MessageSquare,
   PackageCheck,
   Phone,
+  Plus,
   Search,
   Settings,
   ShoppingBag,
+  Tag,
   Truck,
   Users,
 } from "lucide-react";
@@ -79,6 +83,7 @@ type InboxItem =
     };
 
 type Filter = "all" | "message" | "order" | "direct";
+type SalesRange = "daily" | "weekly" | "monthly";
 type AdminPage =
   | "dashboard"
   | "orders"
@@ -222,6 +227,7 @@ const AdminPortal = () => {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
+  const [salesRange, setSalesRange] = useState<SalesRange>("daily");
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
@@ -373,6 +379,81 @@ const AdminPortal = () => {
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
   const contactCount = customerContacts.length;
   const orderItems = inboxItems.filter((item) => item.type === "order");
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayOrderItems = orderItems.filter((item) => item.createdAt >= todayStart.getTime());
+  const todayRevenue = todayOrderItems.reduce((sum, item) => sum + item.total, 0);
+  const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
+  const lowStockAlerts = 0;
+  const recentOrders = orderItems.slice(0, 5);
+  const dashboardAlerts = [
+    {
+      title: "Low inventory: Meat Pies",
+      detail: "Connect inventory counts to make this alert live.",
+    },
+    {
+      title: "Failed payment alert",
+      detail: "Stripe checkout monitoring is ready for the next integration step.",
+    },
+  ];
+  const salesBuckets = useMemo(() => {
+    const buckets =
+      salesRange === "daily"
+        ? Array.from({ length: 7 }, (_, index) => {
+            const date = new Date();
+            date.setDate(date.getDate() - (6 - index));
+            date.setHours(0, 0, 0, 0);
+            const nextDate = new Date(date);
+            nextDate.setDate(date.getDate() + 1);
+
+            return {
+              label: new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date),
+              start: date.getTime(),
+              end: nextDate.getTime(),
+            };
+          })
+        : salesRange === "weekly"
+          ? Array.from({ length: 4 }, (_, index) => {
+              const end = new Date();
+              end.setDate(end.getDate() - (3 - index) * 7);
+              end.setHours(23, 59, 59, 999);
+              const start = new Date(end);
+              start.setDate(end.getDate() - 6);
+              start.setHours(0, 0, 0, 0);
+
+              return {
+                label: `W${index + 1}`,
+                start: start.getTime(),
+                end: end.getTime(),
+              };
+            })
+          : Array.from({ length: 6 }, (_, index) => {
+              const date = new Date();
+              date.setMonth(date.getMonth() - (5 - index), 1);
+              date.setHours(0, 0, 0, 0);
+              const nextDate = new Date(date);
+              nextDate.setMonth(date.getMonth() + 1);
+
+              return {
+                label: new Intl.DateTimeFormat("en-US", { month: "short" }).format(date),
+                start: date.getTime(),
+                end: nextDate.getTime(),
+              };
+            });
+
+    const values = buckets.map((bucket) => ({
+      label: bucket.label,
+      total: orderItems
+        .filter((item) => item.createdAt >= bucket.start && item.createdAt < bucket.end)
+        .reduce((sum, item) => sum + item.total, 0),
+    }));
+    const maxTotal = Math.max(...values.map((bucket) => bucket.total), 1);
+
+    return values.map((bucket) => ({
+      ...bucket,
+      height: Math.max((bucket.total / maxTotal) * 100, bucket.total > 0 ? 12 : 4),
+    }));
+  }, [orderItems, salesRange]);
   const latestActivityAt = inboxItems[0]?.createdAt;
   const currentUserLabel = user?.email ?? (isUsingPassword ? "Password access" : "Not signed in");
 
@@ -454,6 +535,179 @@ const AdminPortal = () => {
         </div>
       )}
     </>
+  );
+
+  const dashboardOverviewPanel = (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Today's Revenue</p>
+            <DollarSign className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? formatCurrency(todayRevenue) : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">From today's order inquiries</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Orders</p>
+            <PackageCheck className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? todayOrderItems.length : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Created today</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Conversion</p>
+            <BarChart3 className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? `${conversionRate}%` : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Inquiries from total activity</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-muted-foreground">Low Stock Alert</p>
+            <AlertTriangle className="text-cajun" size={20} />
+          </div>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? lowStockAlerts : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Inventory tracking ready</p>
+        </div>
+      </div>
+
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-foreground">Sales Graph</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Revenue trend from order inquiry totals.</p>
+          </div>
+          <div className="flex w-fit rounded-[8px] border border-border bg-background p-1">
+            {[
+              ["daily", "Daily"],
+              ["weekly", "Weekly"],
+              ["monthly", "Monthly"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSalesRange(value as SalesRange)}
+                className={`rounded-[8px] px-3 py-2 text-sm font-semibold transition-colors ${
+                  salesRange === value ? "bg-cajun text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6 flex h-64 items-end gap-3 border-l border-b border-border px-3 pb-3">
+          {salesBuckets.map((bucket) => (
+            <div key={bucket.label} className="flex h-full flex-1 flex-col justify-end gap-2">
+              <div className="flex flex-1 items-end">
+                <div
+                  className="w-full rounded-t-[8px] bg-cajun/80 transition-all"
+                  style={{ height: `${bucket.height}%` }}
+                  title={`${bucket.label}: ${formatCurrency(bucket.total)}`}
+                />
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-semibold text-foreground">{bucket.label}</p>
+                <p className="text-xs text-muted-foreground">{formatCurrency(bucket.total)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="border border-border bg-card">
+          <div className="border-b border-border p-5">
+            <h2 className="font-serif text-2xl font-bold text-foreground">Recent Orders</h2>
+          </div>
+          <div>
+            {isLoading ? (
+              <p className="p-5 text-sm text-muted-foreground">Loading recent orders...</p>
+            ) : !isUnlocked ? (
+              <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review recent orders.</p>
+            ) : recentOrders.length === 0 ? (
+              <p className="p-5 text-sm text-muted-foreground">No recent orders yet.</p>
+            ) : (
+              recentOrders.map((order, index) => (
+                <button
+                  key={order.id}
+                  type="button"
+                  onClick={() => {
+                    setActivePage("orders");
+                    setSelectedId(order.id);
+                  }}
+                  className="grid w-full gap-2 border-b border-border p-4 text-left transition-colors last:border-b-0 hover:bg-muted md:grid-cols-[1fr_auto]"
+                >
+                  <div>
+                    <p className="font-semibold text-foreground">Order #{String(1023 + index)}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{order.customerName}</p>
+                  </div>
+                  <div className="text-left md:text-right">
+                    <p className="font-semibold text-foreground">{formatCurrency(order.total)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="border border-border bg-card">
+          <div className="border-b border-border p-5">
+            <h2 className="font-serif text-2xl font-bold text-foreground">Alerts / Notifications</h2>
+          </div>
+          <div>
+            {dashboardAlerts.map((alert) => (
+              <div key={alert.title} className="flex gap-3 border-b border-border p-4 last:border-b-0">
+                <AlertTriangle className="mt-0.5 shrink-0 text-cajun" size={18} />
+                <div>
+                  <p className="font-semibold text-foreground">{alert.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{alert.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-foreground">Quick Actions</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Jump into common admin tasks.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActivePage("products")}
+              className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+            >
+              <Plus size={15} />
+              Add Product
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePage("marketing")}
+              className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              <Tag size={15} />
+              Create Promo
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePage("orders")}
+              className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              <PackageCheck size={15} />
+              New Order
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 
   const metricsPanel = (
@@ -851,6 +1105,7 @@ const AdminPortal = () => {
 
     return (
       <div className="space-y-6">
+        {dashboardOverviewPanel}
         {metricsPanel}
         {customerDatabasePanel}
         {inboxWorkspace}
