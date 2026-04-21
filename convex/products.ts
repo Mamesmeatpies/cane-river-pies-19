@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const getAdminAccess = (adminKey: string) => {
@@ -130,6 +130,32 @@ export const listAllInternal = internalQuery({
     const products = await ctx.db.query("products").collect();
 
     return products.sort((a, b) => a.createdAt - b.createdAt);
+  },
+});
+
+export const seedDefaultsInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let seeded = 0;
+
+    for (const product of defaultProducts) {
+      const existing = await ctx.db
+        .query("products")
+        .withIndex("by_productId", (q) => q.eq("productId", product.productId))
+        .unique();
+
+      if (!existing) {
+        const now = Date.now();
+        await ctx.db.insert("products", {
+          ...product,
+          createdAt: now,
+          updatedAt: now,
+        });
+        seeded += 1;
+      }
+    }
+
+    return { seeded };
   },
 });
 

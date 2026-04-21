@@ -425,6 +425,7 @@ const AdminPortal = () => {
     );
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
+  const showPasswordFallback = !isUsingPassword && (!isUnlocked || Boolean(inboxError));
 
   const loadInbox = useCallback(async () => {
     if (!user) {
@@ -440,7 +441,6 @@ const AdminPortal = () => {
       setAdminResult(result as AdminInboxResult);
     } catch {
       setInboxError("Could not load the admin inbox. Please sign in again.");
-      setAdminResult(null);
     } finally {
       setInboxLoading(false);
     }
@@ -1011,6 +1011,33 @@ const AdminPortal = () => {
           >
             Try again
           </button>
+        </div>
+      )}
+      {showPasswordFallback && (
+        <div className="border border-border bg-card p-4 text-sm text-foreground">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-1">
+              <p className="font-semibold">Use the admin password to review product quantities.</p>
+              <p className="text-muted-foreground">
+                If WorkOS access is unavailable right now, the password fallback will still unlock products and inventory.
+              </p>
+            </div>
+            <form onSubmit={handlePasswordSubmit} className="flex w-full max-w-md flex-col gap-3 sm:flex-row">
+              <input
+                type="password"
+                value={fallbackInput}
+                onChange={(event) => setFallbackInput(event.target.value)}
+                placeholder="Admin password"
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+              <button
+                type="submit"
+                className="rounded-[8px] border border-border px-4 py-3 font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Unlock with password
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </>

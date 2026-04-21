@@ -116,13 +116,20 @@ export const getInboxForAdmin = action({
         ctx.runQuery(internal.analytics.summaryInternal, {}),
       ]);
 
+      let resolvedProducts = products;
+
+      if (resolvedProducts.length === 0) {
+        await ctx.runMutation(internal.products.seedDefaultsInternal, {});
+        resolvedProducts = await ctx.runQuery(internal.products.listAllInternal, {});
+      }
+
       return {
         access: auth.access,
         user: auth.user,
         messages,
         directMessages,
         orders,
-        products,
+        products: resolvedProducts,
         analytics,
       };
     } catch {
