@@ -42,6 +42,38 @@ export const create = mutation({
       throw new Error("Cannot create an order with no items.");
     }
 
+    if (args.status === "submitted") {
+      const quantitiesByProductId = new Map<string, number>();
+
+      for (const item of args.items) {
+        quantitiesByProductId.set(item.productId, (quantitiesByProductId.get(item.productId) ?? 0) + item.quantity);
+      }
+
+      for (const [productId, quantity] of quantitiesByProductId) {
+        const product = await ctx.db
+          .query("products")
+          .withIndex("by_productId", (q) => q.eq("productId", productId))
+          .unique();
+
+        if (!product) {
+          throw new Error(`Inventory item not found for product ${productId}.`);
+        }
+
+        if (product.stock < quantity) {
+          throw new Error(`Not enough inventory for ${product.name}.`);
+        }
+
+        const nextStock = product.stock - quantity;
+        const threshold = product.inventoryThreshold ?? 10;
+
+        await ctx.db.patch(product._id, {
+          stock: nextStock,
+          status: nextStock <= threshold ? "low_stock" : "active",
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     return await ctx.db.insert("orders", {
       ...args,
       createdAt: Date.now(),
