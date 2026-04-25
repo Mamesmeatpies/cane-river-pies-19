@@ -32,10 +32,12 @@ const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
 const textToHtml = (value: string) => escapeHtml(value).replace(/\n/g, "<br />");
 
 const sendResendEmail = async ({
+  to,
   subject,
   text,
   replyTo,
 }: {
+  to: string[];
   subject: string;
   text: string;
   replyTo: string;
@@ -55,7 +57,7 @@ const sendResendEmail = async ({
     },
     body: JSON.stringify({
       from,
-      to: [notificationEmail],
+      to,
       subject,
       text,
       html: `<div style="font-family:Arial,sans-serif;line-height:1.5">${textToHtml(text)}</div>`,
@@ -79,6 +81,19 @@ const trySendResendEmail = async (email: Parameters<typeof sendResendEmail>[0]) 
   }
 };
 
+const sendAdminEmail = (email: Omit<Parameters<typeof sendResendEmail>[0], "to">) =>
+  trySendResendEmail({
+    ...email,
+    to: [notificationEmail],
+  });
+
+const sendCustomerEmail = (email: string, message: Omit<Parameters<typeof sendResendEmail>[0], "to" | "replyTo">) =>
+  trySendResendEmail({
+    ...message,
+    to: [email],
+    replyTo: notificationEmail,
+  });
+
 export const submitContactMessage = action({
   args: {
     name: v.string(),
@@ -90,7 +105,7 @@ export const submitContactMessage = action({
     const messageId = await ctx.runMutation(api.contactMessages.create, args);
     const phone = args.phone ?? "Not provided";
 
-    const notificationSent = await trySendResendEmail({
+    const notificationSent = await sendAdminEmail({
       subject: `New contact message from ${args.name}`,
       replyTo: args.email,
       text: [
@@ -103,7 +118,21 @@ export const submitContactMessage = action({
       ].join("\n"),
     });
 
-    return { messageId, notificationSent };
+    const customerEmailSent = await sendCustomerEmail(args.email, {
+      subject: "We received your message",
+      text: [
+        `Hi ${args.name},`,
+        "",
+        "Thanks for reaching out to Mame's Meat Pies. We received your message and will follow up soon.",
+        "",
+        "Your message:",
+        args.message,
+        "",
+        "You can also reach us at 800-318-7135 if you need us sooner.",
+      ].join("\n"),
+    });
+
+    return { messageId, notificationSent, customerEmailSent };
   },
 });
 
@@ -118,7 +147,7 @@ export const submitDirectMessage = action({
   },
   handler: async (ctx, args) => {
     const directMessageId = await ctx.runMutation(api.directMessages.create, args);
-    const notificationSent = await trySendResendEmail({
+    const notificationSent = await sendAdminEmail({
       subject: `New direct message from ${args.name}`,
       replyTo: args.email ?? notificationEmail,
       text: [
@@ -133,7 +162,23 @@ export const submitDirectMessage = action({
       ].join("\n"),
     });
 
-    return { directMessageId, notificationSent };
+    const customerEmailSent = args.email
+      ? await sendCustomerEmail(args.email, {
+          subject: "We received your message",
+          text: [
+            `Hi ${args.name},`,
+            "",
+            "Thanks for contacting Mame's Meat Pies. We received your message and will follow up soon.",
+            "",
+            "Your message:",
+            args.message,
+            "",
+            "You can also reach us at 800-318-7135 if you need us sooner.",
+          ].join("\n"),
+        })
+      : false;
+
+    return { directMessageId, notificationSent, customerEmailSent };
   },
 });
 
@@ -152,13 +197,25 @@ export const submitNewsletterSignup = action({
 
     const notificationSent = result.alreadySubscribed
       ? false
-      : await trySendResendEmail({
+      : await sendAdminEmail({
           subject: "New Mame's email list signup",
           replyTo: args.email,
           text: [`New email list signup`, `Name: ${name || "Not provided"}`, `Email: ${args.email}`].join("\n"),
         });
 
-    return { ...result, notificationSent };
+    const customerEmailSent = result.alreadySubscribed
+      ? false
+      : await sendCustomerEmail(args.email, {
+          subject: "Thanks for joining the Mame's Meat Pies email list",
+          text: [
+            `Hi ${name || "there"},`,
+            "",
+            "Thanks for signing up for updates from Mame's Meat Pies.",
+            "We'll send you news, specials, and product updates from time to time.",
+          ].join("\n"),
+        });
+
+    return { ...result, notificationSent, customerEmailSent };
   },
 });
 
@@ -190,7 +247,7 @@ export const submitOrder = action({
       )
       .join("\n");
 
-    const notificationSent = await trySendResendEmail({
+    const notificationSent = await sendAdminEmail({
       subject: `New Mame's Meat Pie order from ${args.name}`,
       replyTo: args.email,
       text: [
@@ -214,6 +271,31 @@ export const submitOrder = action({
       ].join("\n"),
     });
 
-    return { orderId, notificationSent };
+    const customerEmailSent = await sendCustomerEmail(args.email, {
+      subject: "We received your order",
+      text: [
+        `Hi ${args.name},`,
+        "",
+        "Thanks for your order with Mame's Meat Pies. We received it and will follow up soon with next steps.",
+        "",
+        "Order summary:",
+        orderLines,
+        "",
+        ...(args.promoCode
+          ? [
+              `Subtotal: ${formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0))}`,
+              `Promo: ${args.promoCode} (-${formatCurrency(args.promoDiscount ?? 0)})`,
+              "",
+            ]
+          : []),
+        `Total: ${formatCurrency(args.total)}`,
+        "",
+        `Notes: ${args.notes ?? "None"}`,
+        "",
+        "If you need to reach us right away, call 800-318-7135.",
+      ].join("\n"),
+    });
+
+    return { orderId, notificationSent, customerEmailSent };
   },
 });
