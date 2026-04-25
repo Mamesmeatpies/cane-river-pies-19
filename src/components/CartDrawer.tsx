@@ -101,11 +101,14 @@ const CartDrawer = () => {
       total: totalPrice,
     });
 
-    toast.success(
-      result.notificationSent
-        ? "Order submitted! We'll be in touch soon."
-        : "Order saved! We'll follow up from the admin inbox."
-    );
+    if (result.customerEmailSent) {
+      toast.success("Order submitted! Check your email for your order confirmation.");
+    } else if (result.notificationSent) {
+      toast.success("Order submitted! We received it and will follow up soon.");
+    } else {
+      toast.success("Order saved! We received it, but the email confirmation did not send.");
+    }
+
     clearCart();
     setShowCheckout(false);
     setForm({ name: "", email: "", phone: "", notes: "" });

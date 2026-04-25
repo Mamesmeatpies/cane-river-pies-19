@@ -26,8 +26,12 @@ const ContactSection = () => {
         message: form.message.trim(),
       });
       toast({
-        title: "Message saved!",
-        description: result.notificationSent ? "We'll get back to you soon." : "We'll follow up from the admin inbox.",
+        title: "Message sent!",
+        description: result.customerEmailSent
+          ? "Check your email for a confirmation from Mame's Meat Pies."
+          : result.notificationSent
+            ? "We received your message and will get back to you soon."
+            : "We received your message, but the email confirmation did not send.",
       });
       setForm({ name: "", email: "", phone: "", message: "" });
     } catch {
@@ -53,7 +57,11 @@ const ContactSection = () => {
 
       toast({
         title: result.alreadySubscribed ? "You're already on the list!" : "You're on the list!",
-        description: "We'll send Mame's updates, specials, and event news your way.",
+        description: result.alreadySubscribed
+          ? "You're already subscribed to Mame's updates, specials, and event news."
+          : result.customerEmailSent
+            ? "Check your email for your signup confirmation."
+            : "You're subscribed. Updates, specials, and event news will head your way.",
       });
       setNewsletterName("");
       setNewsletterEmail("");
