@@ -3,8 +3,8 @@ import { action } from "./_generated/server";
 import { api } from "./_generated/api";
 
 const notificationEmail = process.env.RESEND_TO_EMAIL ?? "mamesmeatpies@gmail.com";
-const mamePortraitUrl =
-  "https://raw.githubusercontent.com/Mamesmeatpies/cane-river-pies-19/main/src/assets/mame-portrait-2026.jpg";
+const publicSiteUrl = (process.env.PUBLIC_SITE_URL ?? "https://www.mamescanerivermeatpies.com").replace(/\/$/, "");
+const mamePortraitUrl = `${publicSiteUrl}/mame-portrait-2026.jpg`;
 
 const orderItemValidator = v.object({
   productId: v.string(),
