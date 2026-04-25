@@ -3,6 +3,8 @@ import { action } from "./_generated/server";
 import { api } from "./_generated/api";
 
 const notificationEmail = process.env.RESEND_TO_EMAIL ?? "mamesmeatpies@gmail.com";
+const mamePortraitUrl =
+  "https://raw.githubusercontent.com/Mamesmeatpies/cane-river-pies-19/main/src/assets/mame-portrait-2026.jpg";
 
 const orderItemValidator = v.object({
   productId: v.string(),
@@ -31,16 +33,25 @@ const formatCurrency = (value: number) => `$${value.toFixed(2)}`;
 
 const textToHtml = (value: string) => escapeHtml(value).replace(/\n/g, "<br />");
 
+const wrapEmailHtml = (content: string) =>
+  `<div style="background:#f7f1e8;padding:24px;font-family:Arial,sans-serif;line-height:1.6;color:#2a211c">
+    <div style="max-width:640px;margin:0 auto;background:#fffaf3;border:1px solid #eadbc8;border-radius:20px;overflow:hidden">
+      ${content}
+    </div>
+  </div>`;
+
 const sendResendEmail = async ({
   to,
   subject,
   text,
   replyTo,
+  html,
 }: {
   to: string[];
   subject: string;
   text: string;
   replyTo: string;
+  html?: string;
 }) => {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
@@ -60,7 +71,7 @@ const sendResendEmail = async ({
       to,
       subject,
       text,
-      html: `<div style="font-family:Arial,sans-serif;line-height:1.5">${textToHtml(text)}</div>`,
+      html: html ?? `<div style="font-family:Arial,sans-serif;line-height:1.5">${textToHtml(text)}</div>`,
       reply_to: replyTo,
     }),
   });
@@ -277,6 +288,7 @@ export const submitOrder = action({
         `Hi ${args.name},`,
         "",
         "Thanks for your order with Mame's Meat Pies. We received it and will follow up soon with next steps.",
+        "Thank you for trying Mame's Cane River Meat Pies. We appreciate your business. Please enjoy!",
         "",
         "Order summary:",
         orderLines,
@@ -294,6 +306,49 @@ export const submitOrder = action({
         "",
         "If you need to reach us right away, call 800-318-7135.",
       ].join("\n"),
+      html: wrapEmailHtml(`
+        <div style="padding:32px 32px 12px;text-align:center;background:linear-gradient(180deg,#4a2d23 0%,#6f4635 100%);color:#fffaf3">
+          <img
+            src="${mamePortraitUrl}"
+            alt="Mame, whose family recipe inspires every Cane River Meat Pie"
+            style="width:132px;height:132px;object-fit:cover;border-radius:999px;border:4px solid rgba(245,223,167,0.55);box-shadow:0 10px 30px rgba(0,0,0,0.18)"
+          />
+          <div style="margin-top:16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#f5dfa7">Mame's Legacy</div>
+          <h1 style="margin:10px 0 8px;font-size:30px;line-height:1.2;font-family:Georgia,serif">We received your order</h1>
+          <p style="margin:0 auto 12px;max-width:460px;font-size:16px;line-height:1.6;color:#f8eee0">
+            From Mame's kitchen recipe to your table.
+          </p>
+        </div>
+        <div style="padding:28px 32px 32px">
+          <p style="margin:0 0 16px;font-size:16px">Hi ${escapeHtml(args.name)},</p>
+          <p style="margin:0 0 14px;font-size:16px">
+            Thanks for your order with Mame's Meat Pies. We received it and will follow up soon with next steps.
+          </p>
+          <div style="margin:20px 0;padding:18px 20px;border-radius:16px;background:#f7f1e8;border:1px solid #eadbc8">
+            <p style="margin:0 0 10px;font-size:17px;font-family:Georgia,serif;color:#6f4635">A note from Mame's table</p>
+            <p style="margin:0;font-size:16px;color:#3a2d26">
+              Thank you for trying Mame's Cane River Meat Pies. We appreciate your business. Please enjoy!
+            </p>
+          </div>
+          <div style="margin-top:22px;padding:20px;border-radius:16px;background:#fff;border:1px solid #eadbc8">
+            <p style="margin:0 0 12px;font-size:17px;font-family:Georgia,serif;color:#2a211c">Order summary</p>
+            <p style="margin:0;font-size:15px;white-space:pre-line;color:#4b3a31">${textToHtml(orderLines)}</p>
+            ${
+              args.promoCode
+                ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">
+                    Subtotal: ${escapeHtml(formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0)))}<br />
+                    Promo: ${escapeHtml(args.promoCode)} (-${escapeHtml(formatCurrency(args.promoDiscount ?? 0))})
+                  </p>`
+                : ""
+            }
+            <p style="margin:14px 0 0;font-size:16px;font-weight:700;color:#2a211c">Total: ${escapeHtml(formatCurrency(args.total))}</p>
+            <p style="margin:10px 0 0;font-size:15px;color:#4b3a31">Notes: ${escapeHtml(args.notes ?? "None")}</p>
+          </div>
+          <p style="margin:22px 0 0;font-size:15px;color:#4b3a31">
+            If you need to reach us right away, call <a href="tel:8003187135" style="color:#9f3b27;text-decoration:none">800-318-7135</a>.
+          </p>
+        </div>
+      `),
     });
 
     return { orderId, notificationSent, customerEmailSent };
