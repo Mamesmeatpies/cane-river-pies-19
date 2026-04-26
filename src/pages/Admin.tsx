@@ -586,8 +586,19 @@ const AdminConfigurationMissing = () => (
   </main>
 );
 
-const AdminPortal = () => {
-  const { getAccessToken, isLoading: authLoading, signIn, signOut, user } = useAuth();
+type AdminPortalAuthProps = {
+  getAccessToken: () => Promise<string>;
+  authLoading: boolean;
+  signIn: (options?: { screenHint?: string }) => Promise<void> | void;
+  signOut: (options?: { returnTo?: string }) => Promise<void> | void;
+  user:
+    | {
+        email?: string | null;
+      }
+    | null;
+};
+
+const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user }: AdminPortalAuthProps) => {
   const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
   const createProduct = useMutation(api.products.createForAdmin);
   const updateProduct = useMutation(api.products.updateForAdmin);
@@ -752,13 +763,15 @@ const AdminPortal = () => {
   }, [adminResult?.marketingOutputs, isUsingPassword, marketingOutputResult?.outputs, selectedMarketingOutputId]);
 
   useEffect(() => {
-    if (!shouldAutoSelectLatestOutput || marketingOutputs.length === 0) {
+    const outputRows = ((isUsingPassword ? marketingOutputResult?.outputs : adminResult?.marketingOutputs) ?? []) as MarketingOutput[];
+
+    if (!shouldAutoSelectLatestOutput || outputRows.length === 0) {
       return;
     }
 
-    setSelectedMarketingOutputId(marketingOutputs[0]?._id ?? null);
+    setSelectedMarketingOutputId(outputRows[0]?._id ?? null);
     setShouldAutoSelectLatestOutput(false);
-  }, [marketingOutputs, shouldAutoSelectLatestOutput]);
+  }, [adminResult?.marketingOutputs, isUsingPassword, marketingOutputResult?.outputs, shouldAutoSelectLatestOutput]);
 
   useEffect(() => {
     if (!isUsingPassword || passwordAccess !== "denied") {
@@ -3800,9 +3813,33 @@ const AdminPortal = () => {
   );
 };
 
+const AdminPortalWithAuth = () => {
+  const { getAccessToken, isLoading: authLoading, signIn, signOut, user } = useAuth();
+
+  return (
+    <AdminPortalContent
+      getAccessToken={getAccessToken}
+      authLoading={authLoading}
+      signIn={signIn}
+      signOut={signOut}
+      user={user ? { email: user.email } : null}
+    />
+  );
+};
+
+const AdminPortalPasswordOnly = () => (
+  <AdminPortalContent
+    getAccessToken={async () => ""}
+    authLoading={false}
+    signIn={() => {}}
+    signOut={() => {}}
+    user={null}
+  />
+);
+
 const Admin = () => {
   if (!workosClientId) {
-    return <AdminConfigurationMissing />;
+    return <AdminPortalPasswordOnly />;
   }
 
   return (
@@ -3814,7 +3851,7 @@ const Admin = () => {
         void signIn({ screenHint: "sign-in" });
       }}
     >
-      <AdminPortal />
+      <AdminPortalWithAuth />
     </AuthKitProvider>
   );
 };
