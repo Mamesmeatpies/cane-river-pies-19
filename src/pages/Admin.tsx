@@ -118,6 +118,9 @@ type InboxItem =
 type Filter = "all" | "message" | "order" | "direct";
 type SalesRange = "daily" | "weekly" | "monthly";
 type ProductStatus = "active" | "draft" | "low_stock";
+type MarketingDraftType = "product" | "event" | "promotion" | "testimonial" | "founder-story" | "weekly-update";
+type MarketingPriority = "high" | "medium" | "low";
+type MarketingApprovalStatus = "draft" | "ready" | "approved" | "scheduled";
 type AdminPage =
   | "dashboard"
   | "orders"
@@ -175,6 +178,81 @@ type AdminProduct = {
   imageUploadName?: string;
 };
 
+type MarketingDraft = {
+  _id?: Id<"marketingDrafts">;
+  title: string;
+  type: MarketingDraftType;
+  summary: string;
+  facts: string;
+  cta?: string;
+  channels: string[];
+  assetLinks?: string[];
+  priority: MarketingPriority;
+  publishBy?: string;
+  approvalStatus: MarketingApprovalStatus;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type GeneratedSocialDraft = {
+  sourceId?: Id<"marketingDrafts">;
+  title: string;
+  channelLabel: string;
+  caption: string;
+  shortPost: string;
+  hashtags: string[];
+  assetHint: string;
+};
+
+type GeneratedWeeklyNote = {
+  title: string;
+  body: string;
+  recapPost: string;
+  followUps: string[];
+};
+
+type MarketingOutputStatus = "draft" | "approved" | "scheduled" | "posted";
+
+type MarketingGenerationResult = {
+  access: "granted" | "denied" | "missing";
+  runLabel?: string;
+  provider: string | null;
+  generatedAt: number | null;
+  socialDrafts: GeneratedSocialDraft[];
+  weeklyNote: GeneratedWeeklyNote | null;
+};
+
+type SavedMarketingPack = {
+  _id?: Id<"marketingGeneratedPacks">;
+  runLabel: string;
+  provider: string;
+  generatedAt: number;
+  sourceCount: number;
+  socialDrafts: GeneratedSocialDraft[];
+  weeklyNote: GeneratedWeeklyNote | null;
+};
+
+type MarketingOutput = {
+  _id?: Id<"marketingOutputs">;
+  packId?: Id<"marketingGeneratedPacks">;
+  kind: "social" | "weekly-note";
+  title: string;
+  channelLabel: string;
+  body: string;
+  shortPost?: string;
+  hashtags?: string[];
+  assetHint: string;
+  selectedAssets: string[];
+  sourceType?: string;
+  status: MarketingOutputStatus;
+  publishAt?: string;
+  provider: string;
+  runLabel: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type AdminInboxResult = {
   access: "granted" | "denied" | "missing";
   user: {
@@ -187,6 +265,9 @@ type AdminInboxResult = {
   directMessages: DirectMessage[];
   orders: Order[];
   products: AdminProduct[];
+  marketingDrafts: MarketingDraft[];
+  marketingGeneratedPacks: SavedMarketingPack[];
+  marketingOutputs: MarketingOutput[];
   analytics: AnalyticsSummary | null;
 };
 
@@ -245,6 +326,61 @@ const emptyProductForm: AdminProduct = {
   imageUploadName: "",
 };
 
+const marketingTypeOptions: MarketingDraftType[] = [
+  "product",
+  "event",
+  "promotion",
+  "testimonial",
+  "founder-story",
+  "weekly-update",
+];
+const marketingPriorityOptions: MarketingPriority[] = ["high", "medium", "low"];
+const marketingApprovalOptions: MarketingApprovalStatus[] = ["draft", "ready", "approved", "scheduled"];
+const marketingChannelOptions = ["Instagram", "Facebook", "LinkedIn", "X", "Email", "Website Notes"];
+const marketingAssetOptions = [
+  "src/assets/mini-pies-tray.png",
+  "src/assets/product-mini.jpg",
+  "src/assets/product-spicy.png",
+  "src/assets/product-beef-pork.jpg",
+  "src/assets/product-spicy.jpg",
+  "src/assets/product-turkey.png",
+  "src/assets/product-turkey.jpg",
+  "src/assets/hero-meat-pies.png",
+  "src/assets/hero-meatpies.jpg",
+  "src/assets/mame-kitchen-1.jpg",
+  "src/assets/mame-kitchen-2.jpg",
+  "src/assets/mame-portrait-2026.jpg",
+  "src/assets/mame-portrait-2026 2.jpg",
+];
+const marketingOutputStatusOptions: MarketingOutputStatus[] = ["draft", "approved", "scheduled", "posted"];
+const emptyMarketingDraftForm = {
+  title: "",
+  type: "weekly-update",
+  summary: "",
+  facts: "",
+  cta: "",
+  channels: ["Instagram", "Facebook", "Website Notes"],
+  assetLinks: [],
+  priority: "medium",
+  publishBy: "",
+  approvalStatus: "draft",
+  notes: "",
+} satisfies Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">;
+const emptyMarketingOutputForm = {
+  title: "",
+  channelLabel: "Instagram / Facebook",
+  body: "",
+  shortPost: "",
+  hashtags: [],
+  assetHint: "",
+  selectedAssets: [],
+  status: "draft",
+  publishAt: "",
+} satisfies Omit<
+  MarketingOutput,
+  "_id" | "packId" | "kind" | "sourceType" | "provider" | "runLabel" | "createdAt" | "updatedAt"
+>;
+
 const formatDate = (timestamp: number) =>
   new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -256,6 +392,82 @@ const formatCurrency = (value: number) =>
     style: "currency",
     currency: "USD",
   }).format(value);
+
+const formatLabel = (value: string) =>
+  value
+    .split(/[-\s]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const getPriorityWeight = (priority: MarketingPriority) => {
+  if (priority === "high") {
+    return 3;
+  }
+
+  if (priority === "medium") {
+    return 2;
+  }
+
+  return 1;
+};
+
+const summarizeFacts = (facts: string) =>
+  facts
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+const buildHashtags = (draft: MarketingDraft) => {
+  const baseTags = ["MamesMeatPies", "CaneRiver", "SouthernFlavor"];
+  const typeTag = formatLabel(draft.type).replace(/\s+/g, "");
+  const channelTags = draft.channels
+    .slice(0, 2)
+    .map((channel) => channel.replace(/\s+/g, ""))
+    .filter((channel) => channel !== "WebsiteNotes");
+
+  return Array.from(new Set([...baseTags, typeTag, ...channelTags])).slice(0, 5);
+};
+
+const buildSocialCaption = (draft: MarketingDraft) => {
+  const facts = summarizeFacts(draft.facts);
+  const lead =
+    draft.type === "event"
+      ? `We're bringing Mame's Meat Pies on the road with ${draft.title.toLowerCase()}.`
+      : draft.type === "promotion"
+        ? `${draft.title} is ready to share with folks who love bold Southern flavor.`
+        : draft.type === "weekly-update"
+          ? `This week at Mame's Meat Pies: ${draft.title.toLowerCase()}.`
+          : `${draft.title} brings another taste of Mame's kitchen to the table.`;
+
+  return [lead, draft.summary, facts.join(" "), draft.cta].filter(Boolean).join(" ");
+};
+
+const buildShortPost = (draft: MarketingDraft) => {
+  const fact = summarizeFacts(draft.facts)[0];
+  return [draft.title, fact, draft.cta].filter(Boolean).join(" • ");
+};
+
+const buildWeeklyNote = (drafts: MarketingDraft[]): GeneratedWeeklyNote | null => {
+  if (drafts.length === 0) {
+    return null;
+  }
+
+  const weeklyUpdate = drafts.find((draft) => draft.type === "weekly-update") ?? drafts[0];
+  const highlights = drafts.slice(0, 3);
+  const bodySections = [
+    `${weeklyUpdate.title} kept the week rooted in Mame's story and the flavor people know us for.`,
+    ...highlights.map((draft) => `- ${draft.summary}${draft.cta ? ` ${draft.cta}` : ""}`),
+    "We're keeping the momentum going with handcrafted pies, warm hospitality, and more stories worth sharing next week.",
+  ];
+
+  return {
+    title: `Weekly Notes: ${weeklyUpdate.title}`,
+    body: bodySections.join("\n\n"),
+    recapPost: `This week at Mame's Meat Pies: ${highlights.map((draft) => draft.title).join(", ")}.`,
+    followUps: highlights.map((draft) => `Turn "${draft.title}" into a follow-up post for ${draft.channels[0] ?? "social"}.`),
+  };
+};
 
 const getInboxItemLabel = (type: InboxItem["type"]) => {
   if (type === "order") {
@@ -379,6 +591,12 @@ const AdminPortal = () => {
   const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
   const createProduct = useMutation(api.products.createForAdmin);
   const updateProduct = useMutation(api.products.updateForAdmin);
+  const createMarketingDraft = useMutation(api.marketingDrafts.createForAdmin);
+  const updateMarketingDraft = useMutation(api.marketingDrafts.updateForAdmin);
+  const updateMarketingOutput = useMutation(api.marketingOutputs.updateForAdmin);
+  const seedSampleMarketingQueue = useMutation(api.marketingGenerator.seedSampleQueueForAdmin);
+  const importBellPhotoPromo = useMutation(api.marketingGenerator.importBellPhotoPromoForAdmin);
+  const generateMarketingPack = useAction(api.marketingGenerator.generateForAdmin);
   const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -394,6 +612,21 @@ const AdminPortal = () => {
   const [productForm, setProductForm] = useState<AdminProduct>(emptyProductForm);
   const [productSaving, setProductSaving] = useState(false);
   const [productNotice, setProductNotice] = useState<string | null>(null);
+  const [selectedMarketingDraftId, setSelectedMarketingDraftId] = useState<string | null>(null);
+  const [marketingDraftForm, setMarketingDraftForm] =
+    useState<Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">>(emptyMarketingDraftForm);
+  const [marketingDraftSaving, setMarketingDraftSaving] = useState(false);
+  const [marketingDraftNotice, setMarketingDraftNotice] = useState<string | null>(null);
+  const [selectedMarketingOutputId, setSelectedMarketingOutputId] = useState<string | null>(null);
+  const [shouldAutoSelectLatestOutput, setShouldAutoSelectLatestOutput] = useState(false);
+  const [marketingOutputForm, setMarketingOutputForm] =
+    useState<Omit<MarketingOutput, "_id" | "packId" | "kind" | "sourceType" | "provider" | "runLabel" | "createdAt" | "updatedAt">>(
+      emptyMarketingOutputForm
+    );
+  const [marketingOutputSaving, setMarketingOutputSaving] = useState(false);
+  const [marketingOutputNotice, setMarketingOutputNotice] = useState<string | null>(null);
+  const [marketingGeneration, setMarketingGeneration] = useState<MarketingGenerationResult | null>(null);
+  const [marketingGenerationLoading, setMarketingGenerationLoading] = useState(false);
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
@@ -405,6 +638,18 @@ const AdminPortal = () => {
   );
   const passwordOrderResult = useQuery(api.orders.listForAdmin, fallbackKey ? { adminKey: fallbackKey, limit: 1000 } : "skip");
   const productResult = useQuery(api.products.listForAdmin, fallbackKey ? { adminKey: fallbackKey } : "skip");
+  const marketingDraftResult = useQuery(
+    api.marketingDrafts.listForAdmin,
+    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+  );
+  const marketingOutputResult = useQuery(
+    api.marketingOutputs.listForAdmin,
+    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+  );
+  const marketingPackResult = useQuery(
+    api.marketingGenerator.listGeneratedPacksForAdmin,
+    fallbackKey ? { adminKey: fallbackKey, limit: 20 } : "skip"
+  );
   const passwordAnalyticsResult = useQuery(
     api.analytics.summaryForAdmin,
     fallbackKey ? { adminKey: fallbackKey } : "skip"
@@ -415,6 +660,9 @@ const AdminPortal = () => {
     passwordDirectResult?.access ??
     passwordOrderResult?.access ??
     productResult?.access ??
+    marketingDraftResult?.access ??
+    marketingOutputResult?.access ??
+    marketingPackResult?.access ??
     passwordAnalyticsResult?.access;
   const access = adminResult?.access ?? passwordAccess;
   const isLoading =
@@ -458,6 +706,61 @@ const AdminPortal = () => {
   }, [adminResult?.products, isUsingPassword, productResult?.products, selectedProductId]);
 
   useEffect(() => {
+    const draftRows = ((isUsingPassword ? marketingDraftResult?.drafts : adminResult?.marketingDrafts) ?? []) as MarketingDraft[];
+    const selectedDraft = draftRows.find((draft) => draft._id === selectedMarketingDraftId);
+
+    if (selectedDraft) {
+      setMarketingDraftForm({
+        title: selectedDraft.title,
+        type: selectedDraft.type,
+        summary: selectedDraft.summary,
+        facts: selectedDraft.facts,
+        cta: selectedDraft.cta ?? "",
+        channels: selectedDraft.channels,
+        assetLinks: selectedDraft.assetLinks ?? [],
+        priority: selectedDraft.priority,
+        publishBy: selectedDraft.publishBy ?? "",
+        approvalStatus: selectedDraft.approvalStatus,
+        notes: selectedDraft.notes ?? "",
+      });
+      return;
+    }
+
+    setMarketingDraftForm(emptyMarketingDraftForm);
+  }, [adminResult?.marketingDrafts, isUsingPassword, marketingDraftResult?.drafts, selectedMarketingDraftId]);
+
+  useEffect(() => {
+    const outputRows = ((isUsingPassword ? marketingOutputResult?.outputs : adminResult?.marketingOutputs) ?? []) as MarketingOutput[];
+    const selectedOutput = outputRows.find((output) => output._id === selectedMarketingOutputId);
+
+    if (selectedOutput) {
+      setMarketingOutputForm({
+        title: selectedOutput.title,
+        channelLabel: selectedOutput.channelLabel,
+        body: selectedOutput.body,
+        shortPost: selectedOutput.shortPost ?? "",
+        hashtags: selectedOutput.hashtags ?? [],
+        assetHint: selectedOutput.assetHint,
+        selectedAssets: selectedOutput.selectedAssets,
+        status: selectedOutput.status,
+        publishAt: selectedOutput.publishAt ?? "",
+      });
+      return;
+    }
+
+    setMarketingOutputForm(emptyMarketingOutputForm);
+  }, [adminResult?.marketingOutputs, isUsingPassword, marketingOutputResult?.outputs, selectedMarketingOutputId]);
+
+  useEffect(() => {
+    if (!shouldAutoSelectLatestOutput || marketingOutputs.length === 0) {
+      return;
+    }
+
+    setSelectedMarketingOutputId(marketingOutputs[0]?._id ?? null);
+    setShouldAutoSelectLatestOutput(false);
+  }, [marketingOutputs, shouldAutoSelectLatestOutput]);
+
+  useEffect(() => {
     if (!isUsingPassword || passwordAccess !== "denied") {
       return;
     }
@@ -467,6 +770,8 @@ const AdminPortal = () => {
     setFallbackKey("");
     setSelectedId(null);
     setSelectedProductId(null);
+    setSelectedMarketingDraftId(null);
+    setSelectedMarketingOutputId(null);
     setProductNotice("Enter the current admin password to view inventory levels.");
   }, [isUsingPassword, passwordAccess]);
 
@@ -750,6 +1055,10 @@ const AdminPortal = () => {
     (product) => product.status === "low_stock" || product.stock <= (product.inventoryThreshold ?? 10)
   );
   const lowStockAlerts = lowStockProducts.length;
+  const marketingDraftRows = useMemo(
+    () => ((isUsingPassword ? marketingDraftResult?.drafts : adminResult?.marketingDrafts) ?? []) as MarketingDraft[],
+    [adminResult?.marketingDrafts, isUsingPassword, marketingDraftResult?.drafts]
+  );
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -762,6 +1071,63 @@ const AdminPortal = () => {
     );
   }, [adminProductRows, search]);
   const selectedProduct = adminProductRows.find((product) => product._id === selectedProductId);
+  const selectedMarketingDraft = marketingDraftRows.find((draft) => draft._id === selectedMarketingDraftId);
+  const marketingCounts = useMemo(
+    () => ({
+      total: marketingDraftRows.length,
+      weeklyNotes: marketingDraftRows.filter((draft) => draft.type === "weekly-update").length,
+      readyToReview: marketingDraftRows.filter((draft) => draft.approvalStatus === "ready").length,
+      scheduled: marketingDraftRows.filter((draft) => draft.approvalStatus === "scheduled").length,
+    }),
+    [marketingDraftRows]
+  );
+  const draftGeneratorSource = useMemo(
+    () =>
+      marketingDraftRows
+        .filter((draft) => draft.approvalStatus !== "draft")
+        .sort((a, b) => {
+          const priorityDelta = getPriorityWeight(b.priority) - getPriorityWeight(a.priority);
+          if (priorityDelta !== 0) {
+            return priorityDelta;
+          }
+
+          return b.updatedAt - a.updatedAt;
+        }),
+    [marketingDraftRows]
+  );
+  const generatedSocialDrafts = useMemo<GeneratedSocialDraft[]>(
+    () =>
+      draftGeneratorSource
+        .filter((draft) => draft.type !== "weekly-update")
+        .slice(0, 3)
+        .map((draft) => ({
+          sourceId: draft._id,
+          title: draft.title,
+          channelLabel: draft.channels.slice(0, 2).join(" / ") || "Social",
+          caption: buildSocialCaption(draft),
+          shortPost: buildShortPost(draft),
+          hashtags: buildHashtags(draft),
+          assetHint:
+            draft.assetLinks && draft.assetLinks.length > 0
+              ? "Use the linked asset first, then pull from the full photo library to round out the promotion."
+              : "Use all available photos in the library and match the strongest product, tray, hero, or Mame image to the post.",
+        })),
+    [draftGeneratorSource]
+  );
+  const generatedWeeklyNote = useMemo(() => buildWeeklyNote(draftGeneratorSource.slice(0, 4)), [draftGeneratorSource]);
+  const savedMarketingPacks = useMemo(
+    () =>
+      ((isUsingPassword ? marketingPackResult?.packs : adminResult?.marketingGeneratedPacks) ?? []) as SavedMarketingPack[],
+    [adminResult?.marketingGeneratedPacks, isUsingPassword, marketingPackResult?.packs]
+  );
+  const marketingOutputs = useMemo(
+    () => ((isUsingPassword ? marketingOutputResult?.outputs : adminResult?.marketingOutputs) ?? []) as MarketingOutput[],
+    [adminResult?.marketingOutputs, isUsingPassword, marketingOutputResult?.outputs]
+  );
+  const displayedSocialDrafts = marketingGeneration?.socialDrafts ?? generatedSocialDrafts;
+  const displayedWeeklyNote = marketingGeneration?.weeklyNote ?? generatedWeeklyNote;
+  const generationProviderLabel = marketingGeneration?.provider ?? "preview";
+  const selectedMarketingOutput = marketingOutputs.find((output) => output._id === selectedMarketingOutputId) ?? null;
   const dashboardAlerts = [
     {
       title: "Low inventory: Meat Pies",
@@ -773,20 +1139,6 @@ const AdminPortal = () => {
     {
       title: "Failed payment alert",
       detail: "Stripe checkout monitoring is ready for the next integration step.",
-    },
-  ];
-  const promoCodeRows = [
-    {
-      code: "MAMES10",
-      discount: "10% off",
-      usage: "Ready",
-      expiration: "No expiration set",
-    },
-    {
-      code: "LOCALPICKUP",
-      discount: "$5 off",
-      usage: "Ready",
-      expiration: "No expiration set",
     },
   ];
   const inactiveSince = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -951,6 +1303,192 @@ const AdminPortal = () => {
     }
   };
 
+  const updateMarketingDraftForm = (
+    field: keyof Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">,
+    value: string | string[]
+  ) => {
+    setMarketingDraftForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleMarketingDraftSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMarketingDraftNotice(null);
+
+    if (!fallbackKey) {
+      setMarketingDraftNotice("Unlock with the admin password before saving marketing updates.");
+      return;
+    }
+
+    const draftPayload = {
+      title: marketingDraftForm.title.trim(),
+      type: marketingDraftForm.type,
+      summary: marketingDraftForm.summary.trim(),
+      facts: marketingDraftForm.facts.trim(),
+      cta: marketingDraftForm.cta.trim() || undefined,
+      channels: marketingDraftForm.channels,
+      assetLinks: marketingDraftForm.assetLinks?.map((link) => link.trim()).filter(Boolean) ?? [],
+      priority: marketingDraftForm.priority,
+      publishBy: marketingDraftForm.publishBy.trim() || undefined,
+      approvalStatus: marketingDraftForm.approvalStatus,
+      notes: marketingDraftForm.notes?.trim() || undefined,
+    };
+
+    if (!draftPayload.title || !draftPayload.summary || !draftPayload.facts || draftPayload.channels.length === 0) {
+      setMarketingDraftNotice("Title, summary, facts, and at least one channel are required.");
+      return;
+    }
+
+    setMarketingDraftSaving(true);
+
+    try {
+      if (selectedMarketingDraft?._id) {
+        const result = await updateMarketingDraft({
+          adminKey: fallbackKey,
+          id: selectedMarketingDraft._id,
+          draft: draftPayload,
+        });
+        setMarketingDraftNotice(result.access === "granted" ? "Content item updated." : "That admin password did not match.");
+      } else {
+        const result = await createMarketingDraft({
+          adminKey: fallbackKey,
+          draft: draftPayload,
+        });
+        setMarketingDraftNotice(result.access === "granted" ? "Content item added to the queue." : "That admin password did not match.");
+        if (result.access === "granted") {
+          setSelectedMarketingDraftId(null);
+          setMarketingDraftForm(emptyMarketingDraftForm);
+        }
+      }
+    } catch (error) {
+      setMarketingDraftNotice(error instanceof Error ? error.message : "Content item could not be saved.");
+    } finally {
+      setMarketingDraftSaving(false);
+    }
+  };
+
+  const handleSeedMarketingExamples = async () => {
+    setMarketingDraftNotice(null);
+
+    if (!fallbackKey) {
+      setMarketingDraftNotice("Unlock with the admin password before loading sample content.");
+      return;
+    }
+
+    try {
+      const result = await seedSampleMarketingQueue({ adminKey: fallbackKey });
+      setMarketingDraftNotice(
+        result.access === "granted"
+          ? result.inserted > 0
+            ? "Sample marketing content loaded."
+            : "Sample content was skipped because the queue already has items."
+          : "That admin password did not match."
+      );
+    } catch (error) {
+      setMarketingDraftNotice(error instanceof Error ? error.message : "Sample content could not be loaded.");
+    }
+  };
+
+  const handleImportBellPhotoPromo = async () => {
+    setMarketingDraftNotice(null);
+
+    if (!fallbackKey) {
+      setMarketingDraftNotice("Unlock with the admin password before loading the bell-photo promo.");
+      return;
+    }
+
+    try {
+      const result = await importBellPhotoPromo({ adminKey: fallbackKey });
+      if (result.access === "granted" && result.inserted > 0) {
+        setShouldAutoSelectLatestOutput(true);
+      }
+      setMarketingDraftNotice(
+        result.access === "granted"
+          ? result.inserted > 0
+            ? "Bell-photo promo imported into Content Queue and Generated Drafts."
+            : "Bell-photo promo was skipped because it already exists."
+          : "That admin password did not match."
+      );
+    } catch (error) {
+      setMarketingDraftNotice(error instanceof Error ? error.message : "Bell-photo promo could not be imported.");
+    }
+  };
+
+  const handleGenerateMarketingPack = async () => {
+    setMarketingDraftNotice(null);
+
+    if (!fallbackKey) {
+      setMarketingDraftNotice("Unlock with the admin password before generating drafts.");
+      return;
+    }
+
+    setMarketingGenerationLoading(true);
+
+    try {
+      const result = await generateMarketingPack({ adminKey: fallbackKey });
+      setMarketingGeneration(result as MarketingGenerationResult);
+      if (result.access !== "granted") {
+        setMarketingDraftNotice("That admin password did not match.");
+      }
+    } catch (error) {
+      setMarketingDraftNotice(error instanceof Error ? error.message : "Marketing drafts could not be generated.");
+    } finally {
+      setMarketingGenerationLoading(false);
+    }
+  };
+
+  const updateMarketingOutputForm = (
+    field: keyof Omit<MarketingOutput, "_id" | "packId" | "kind" | "sourceType" | "provider" | "runLabel" | "createdAt" | "updatedAt">,
+    value: string | string[]
+  ) => {
+    setMarketingOutputForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleMarketingOutputSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMarketingOutputNotice(null);
+
+    if (!fallbackKey) {
+      setMarketingOutputNotice("Unlock with the admin password before updating generated drafts.");
+      return;
+    }
+
+    if (!selectedMarketingOutput?._id) {
+      setMarketingOutputNotice("Select a generated draft first.");
+      return;
+    }
+
+    setMarketingOutputSaving(true);
+
+    try {
+      const result = await updateMarketingOutput({
+        adminKey: fallbackKey,
+        id: selectedMarketingOutput._id,
+        output: {
+          title: marketingOutputForm.title.trim(),
+          channelLabel: marketingOutputForm.channelLabel.trim(),
+          body: marketingOutputForm.body.trim(),
+          shortPost: marketingOutputForm.shortPost.trim() || undefined,
+          hashtags: marketingOutputForm.hashtags.map((tag) => tag.trim()).filter(Boolean),
+          assetHint: marketingOutputForm.assetHint.trim(),
+          selectedAssets: marketingOutputForm.selectedAssets,
+          status: marketingOutputForm.status,
+          publishAt: marketingOutputForm.publishAt.trim() || undefined,
+        },
+      });
+      setMarketingOutputNotice(result.access === "granted" ? "Generated draft updated." : "That admin password did not match.");
+    } catch (error) {
+      setMarketingOutputNotice(error instanceof Error ? error.message : "Generated draft could not be updated.");
+    } finally {
+      setMarketingOutputSaving(false);
+    }
+  };
+
   const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedKey = fallbackInput.trim();
@@ -962,6 +1500,8 @@ const AdminPortal = () => {
     setFallbackKey(trimmedKey);
     setAdminResult(null);
     setSelectedId(null);
+    setSelectedMarketingDraftId(null);
+    setSelectedMarketingOutputId(null);
   };
 
   const handleSignOut = () => {
@@ -970,6 +1510,8 @@ const AdminPortal = () => {
     setFallbackInput("");
     setFallbackKey("");
     setSelectedId(null);
+    setSelectedMarketingDraftId(null);
+    setSelectedMarketingOutputId(null);
 
     if (user) {
       signOut({ returnTo: window.location.origin });
@@ -1676,113 +2218,720 @@ const AdminPortal = () => {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h2 className="font-serif text-2xl font-bold text-foreground">Marketing</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Plan campaigns, promo codes, email, and SMS outreach.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Capture weekly updates, promotions, and story ideas so the agent has reliable content to draft from.
+            </p>
           </div>
-          <button
-            type="button"
-            className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-          >
-            <Megaphone size={15} />
-            Create Campaign
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSeedMarketingExamples}
+              className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              <Plus size={15} />
+              Load Sample Content
+            </button>
+            <button
+              type="button"
+              onClick={handleImportBellPhotoPromo}
+              className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              <Plus size={15} />
+              Import Bell Photo Promo
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateMarketingPack}
+              disabled={marketingGenerationLoading}
+              className="inline-flex w-fit items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Mail size={15} />
+              {marketingGenerationLoading ? "Generating..." : "Generate With AI"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedMarketingDraftId(null);
+                setMarketingDraftForm(emptyMarketingDraftForm);
+                setMarketingDraftNotice(null);
+              }}
+              className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+            >
+              <Megaphone size={15} />
+              New Content Item
+            </button>
+          </div>
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "Campaigns", icon: Megaphone },
-            { label: "Promo Codes", icon: Tag },
-            { label: "Email", icon: Mail },
-            { label: "SMS", icon: MessageSquare },
+            { label: "Content Queue", value: marketingCounts.total, detail: "Saved ideas and approved facts", icon: Megaphone },
+            { label: "Weekly Notes", value: marketingCounts.weeklyNotes, detail: "Updates tagged for weekly recap", icon: CalendarDays },
+            { label: "Ready For Review", value: marketingCounts.readyToReview, detail: "Drafts waiting for polish", icon: Pencil },
+            { label: "Scheduled", value: marketingCounts.scheduled, detail: "Approved items ready to publish", icon: Mail },
           ].map((item) => {
             const Icon = item.icon;
             return (
-              <button
-                key={item.label}
-                type="button"
-                className="flex items-center justify-between rounded-[8px] border border-border bg-background px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-              >
-                <span>{item.label}</span>
-                <Icon className="text-cajun" size={18} />
-              </button>
+              <div key={item.label} className="rounded-[8px] border border-border bg-background p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-muted-foreground">{item.label}</p>
+                  <Icon className="text-cajun" size={18} />
+                </div>
+                <p className="mt-3 text-3xl font-bold text-foreground">{isUnlocked ? item.value : "-"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{item.detail}</p>
+              </div>
             );
           })}
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
-        <div className="border border-border bg-card">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <form onSubmit={handleMarketingDraftSubmit} className="border border-border bg-card">
           <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-serif text-2xl font-bold text-foreground">Promo Codes</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Track discount codes and expirations.</p>
+              <h3 className="font-serif text-2xl font-bold text-foreground">
+                {selectedMarketingDraft ? "Edit Content Item" : "Content Inbox"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Save approved facts, upcoming events, and weekly notes inputs before the agent writes copy.
+              </p>
             </div>
-            <button
-              type="button"
-              className="inline-flex w-fit items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-            >
-              <Plus size={15} />
-              Create Promo Code
-            </button>
+            <span className="rounded-[8px] bg-gold/20 px-3 py-2 text-xs font-bold uppercase text-foreground">
+              Approval First
+            </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-left text-sm">
-              <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3">Code</th>
-                  <th className="px-5 py-3">Discount</th>
-                  <th className="px-5 py-3">Usage</th>
-                  <th className="px-5 py-3">Expiration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {promoCodeRows.map((promoCode) => (
-                  <tr key={promoCode.code} className="border-b border-border last:border-b-0">
-                    <td className="px-5 py-4 font-semibold text-foreground">{promoCode.code}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{promoCode.discount}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{promoCode.usage}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{promoCode.expiration}</td>
-                  </tr>
+
+          <div className="grid gap-4 p-5 md:grid-cols-2">
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Title</span>
+              <input
+                type="text"
+                value={marketingDraftForm.title}
+                onChange={(event) => updateMarketingDraftForm("title", event.target.value)}
+                placeholder="Spring pop-up at the market"
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Type</span>
+              <select
+                value={marketingDraftForm.type}
+                onChange={(event) => updateMarketingDraftForm("type", event.target.value)}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              >
+                {marketingTypeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabel(option)}
+                  </option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </select>
+            </label>
 
-        <div className="border border-border bg-card p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-serif text-2xl font-bold text-foreground">Email / SMS</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Audience segments for campaign targeting.</p>
-            </div>
-            <div className="flex gap-2">
-              <Mail className="text-cajun" size={18} />
-              <MessageSquare className="text-cajun" size={18} />
-            </div>
-          </div>
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-semibold text-foreground">Summary</span>
+              <textarea
+                value={marketingDraftForm.summary}
+                onChange={(event) => updateMarketingDraftForm("summary", event.target.value)}
+                placeholder="Short summary of the update the agent can turn into a post."
+                rows={3}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
 
-          <div className="mt-5 space-y-3">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Audience Segments</p>
-            {audienceSegments.map((segment) => (
-              <div key={segment.name} className="border border-border bg-background p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-foreground">{segment.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{segment.detail}</p>
-                  </div>
-                  <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
-                    {isUnlocked ? segment.count : "-"}
-                  </span>
-                </div>
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-semibold text-foreground">Approved Facts</span>
+              <textarea
+                value={marketingDraftForm.facts}
+                onChange={(event) => updateMarketingDraftForm("facts", event.target.value)}
+                placeholder="Event date, location, flavor details, pricing, award mention, or any fact that is safe to publish."
+                rows={5}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Priority</span>
+              <select
+                value={marketingDraftForm.priority}
+                onChange={(event) => updateMarketingDraftForm("priority", event.target.value)}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              >
+                {marketingPriorityOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Approval Status</span>
+              <select
+                value={marketingDraftForm.approvalStatus}
+                onChange={(event) => updateMarketingDraftForm("approvalStatus", event.target.value)}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              >
+                {marketingApprovalOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Call To Action</span>
+              <input
+                type="text"
+                value={marketingDraftForm.cta ?? ""}
+                onChange={(event) => updateMarketingDraftForm("cta", event.target.value)}
+                placeholder="Order by phone, visit the pop-up, join the list..."
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-semibold text-foreground">Publish By</span>
+              <input
+                type="date"
+                value={marketingDraftForm.publishBy ?? ""}
+                onChange={(event) => updateMarketingDraftForm("publishBy", event.target.value)}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-semibold text-foreground">Channels</span>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {marketingChannelOptions.map((channel) => {
+                  const isSelected = marketingDraftForm.channels.includes(channel);
+
+                  return (
+                    <label
+                      key={channel}
+                      className={`flex items-center gap-3 rounded-[8px] border px-3 py-3 text-sm transition-colors ${
+                        isSelected ? "border-cajun bg-cajun/5 text-foreground" : "border-border bg-background text-muted-foreground"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(event) => {
+                          const nextChannels = event.target.checked
+                            ? [...marketingDraftForm.channels, channel]
+                            : marketingDraftForm.channels.filter((value) => value !== channel);
+                          updateMarketingDraftForm("channels", nextChannels);
+                        }}
+                        className="h-4 w-4 accent-cajun"
+                      />
+                      <span className="font-medium">{channel}</span>
+                    </label>
+                  );
+                })}
               </div>
-            ))}
+            </label>
+
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-semibold text-foreground">Asset Links</span>
+              <textarea
+                value={(marketingDraftForm.assetLinks ?? []).join("\n")}
+                onChange={(event) =>
+                  updateMarketingDraftForm(
+                    "assetLinks",
+                    event.target.value
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                  )
+                }
+                placeholder="Paste one image, drive, or folder link per line."
+                rows={3}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
+
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-semibold text-foreground">Notes</span>
+              <textarea
+                value={marketingDraftForm.notes ?? ""}
+                onChange={(event) => updateMarketingDraftForm("notes", event.target.value)}
+                placeholder="Any extra context for the future agent: voice reminder, visual direction, missing fact to confirm."
+                rows={3}
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
+            </label>
           </div>
 
-          <button
-            type="button"
-            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-[8px] border border-border px-3 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-          >
-            <Megaphone size={15} />
-            Create Campaign
-          </button>
+          <div className="flex flex-col gap-3 border-t border-border p-5">
+            {marketingDraftNotice && (
+              <div className="rounded-[8px] border border-border bg-background px-4 py-3 text-sm text-foreground">
+                {marketingDraftNotice}
+              </div>
+            )}
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMarketingDraftId(null);
+                  setMarketingDraftForm(emptyMarketingDraftForm);
+                  setMarketingDraftNotice(null);
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-[8px] border border-border px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                <Plus size={15} />
+                Clear Form
+              </button>
+              <button
+                type="submit"
+                disabled={marketingDraftSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-cajun px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Upload size={15} />
+                {marketingDraftSaving ? "Saving..." : selectedMarketingDraft ? "Update Content Item" : "Save Content Item"}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div className="space-y-6">
+          <div className="border border-border bg-card">
+            <div className="border-b border-border p-5">
+              <h3 className="font-serif text-2xl font-bold text-foreground">Draft Generator Preview</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This is the first-pass content pack built from items marked ready, approved, or scheduled.
+              </p>
+            </div>
+            <div className="space-y-5 p-5">
+              {!isUnlocked ? (
+                <p className="text-sm text-muted-foreground">Unlock the portal to preview generated social posts and weekly notes.</p>
+              ) : draftGeneratorSource.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Move a content item from `Draft` to `Ready`, `Approved`, or `Scheduled` to generate preview copy.
+                </p>
+              ) : (
+                <>
+                  <section className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-serif text-xl font-bold text-foreground">Social Drafts</h4>
+                      <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                        {displayedSocialDrafts.length} ready
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      Run: {marketingGeneration?.runLabel ?? "Manual Preview"}
+                      {" • "}
+                      Provider: {generationProviderLabel}
+                      {marketingGeneration?.generatedAt ? ` • Generated ${formatDate(marketingGeneration.generatedAt)}` : ""}
+                    </p>
+                    {displayedSocialDrafts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Add a product, event, promotion, or story item to the ready queue.</p>
+                    ) : (
+                      displayedSocialDrafts.map((draft) => (
+                        <article key={`${draft.sourceId ?? draft.title}-${draft.channelLabel}`} className="rounded-[8px] border border-border bg-background p-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
+                              {draft.channelLabel}
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">{draft.title}</span>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-foreground">{draft.caption}</p>
+                          <p className="mt-3 text-sm font-medium text-cajun">{draft.shortPost}</p>
+                          <p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">
+                            {draft.hashtags.map((tag) => `#${tag}`).join(" ")}
+                          </p>
+                          <p className="mt-3 text-xs text-muted-foreground">{draft.assetHint}</p>
+                        </article>
+                      ))
+                    )}
+                  </section>
+
+                  <section className="space-y-3 border-t border-border pt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-serif text-xl font-bold text-foreground">Weekly Notes Preview</h4>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        Friday Pack
+                      </span>
+                    </div>
+                    {!displayedWeeklyNote ? (
+                      <p className="text-sm text-muted-foreground">Add a weekly update item to build a weekly notes preview.</p>
+                    ) : (
+                      <article className="rounded-[8px] border border-border bg-background p-4">
+                        <h5 className="font-semibold text-foreground">{displayedWeeklyNote.title}</h5>
+                        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">{displayedWeeklyNote.body}</p>
+                        <div className="mt-4 rounded-[8px] border border-border p-3">
+                          <p className="text-xs font-bold uppercase text-muted-foreground">Recap Social Post</p>
+                          <p className="mt-2 text-sm text-foreground">{displayedWeeklyNote.recapPost}</p>
+                        </div>
+                        <div className="mt-4">
+                          <p className="text-xs font-bold uppercase text-muted-foreground">Follow-Up Ideas</p>
+                          <div className="mt-2 space-y-2">
+                            {displayedWeeklyNote.followUps.map((item) => (
+                              <p key={item} className="text-sm text-muted-foreground">
+                                {item}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      </article>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="border border-border bg-card">
+            <div className="border-b border-border p-5">
+              <h3 className="font-serif text-2xl font-bold text-foreground">Saved Runs</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Every AI or fallback generation run is stored here so you can reopen recent output.
+              </p>
+            </div>
+            <div>
+              {!isUnlocked ? (
+                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review saved marketing packs.</p>
+              ) : savedMarketingPacks.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground">No saved runs yet. Generate a pack to store the first one.</p>
+              ) : (
+                savedMarketingPacks.map((pack) => (
+                  <article key={pack._id ?? `${pack.generatedAt}-${pack.provider}`} className="border-b border-border p-4 last:border-b-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
+                        {pack.runLabel}
+                      </span>
+                      <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                        {pack.provider}
+                      </span>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        {pack.socialDrafts.length} social
+                      </span>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        {pack.sourceCount} sources
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm font-semibold text-foreground">{formatDate(pack.generatedAt)}</p>
+                    {pack.socialDrafts[0] ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Latest lead draft: {pack.socialDrafts[0].title}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">No social drafts in this pack.</p>
+                    )}
+                    {pack.weeklyNote ? (
+                      <p className="mt-2 text-sm text-muted-foreground">Weekly note: {pack.weeklyNote.title}</p>
+                    ) : null}
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
+            <div className="border border-border bg-card">
+              <div className="border-b border-border p-5">
+                <h3 className="font-serif text-2xl font-bold text-foreground">Generated Drafts</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Every saved pack becomes individual editable drafts you can approve, schedule, and post.
+                </p>
+              </div>
+              <div>
+                {!isUnlocked ? (
+                  <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review generated drafts.</p>
+                ) : marketingOutputs.length === 0 ? (
+                  <p className="p-5 text-sm text-muted-foreground">No generated drafts yet. Generate a pack to populate this queue.</p>
+                ) : (
+                  marketingOutputs.map((output) => (
+                    <button
+                      key={output._id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMarketingOutputId(output._id ?? null);
+                        setMarketingOutputNotice(null);
+                      }}
+                      className={`w-full border-b border-border p-4 text-left transition-colors last:border-b-0 hover:bg-muted ${
+                        selectedMarketingOutputId === output._id ? "bg-muted" : ""
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
+                          {output.kind === "social" ? "Social" : "Weekly Note"}
+                        </span>
+                        <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                          {formatLabel(output.status)}
+                        </span>
+                        <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                          {output.runLabel}
+                        </span>
+                      </div>
+                      <p className="mt-3 font-semibold text-foreground">{output.title}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{output.channelLabel}</p>
+                      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{output.body}</p>
+                      <p className="mt-3 text-xs font-semibold text-muted-foreground">Updated {formatDate(output.updatedAt)}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleMarketingOutputSubmit} className="border border-border bg-card">
+              <div className="border-b border-border p-5">
+                <h3 className="font-serif text-2xl font-bold text-foreground">Review Draft</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Edit the copy, choose photos, and move the draft through approval.
+                </p>
+              </div>
+
+              {!selectedMarketingOutput ? (
+                <div className="flex min-h-[420px] items-center justify-center p-6 text-center">
+                  <div>
+                    <Megaphone className="mx-auto mb-3 text-muted-foreground" size={36} />
+                    <p className="font-semibold text-foreground">No draft selected</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Choose a generated draft from the queue to review it here.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-4 p-5 md:grid-cols-2">
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Title</span>
+                      <input
+                        type="text"
+                        value={marketingOutputForm.title}
+                        onChange={(event) => updateMarketingOutputForm("title", event.target.value)}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <span className="font-semibold text-foreground">Channel</span>
+                      <input
+                        type="text"
+                        value={marketingOutputForm.channelLabel}
+                        onChange={(event) => updateMarketingOutputForm("channelLabel", event.target.value)}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <span className="font-semibold text-foreground">Status</span>
+                      <select
+                        value={marketingOutputForm.status}
+                        onChange={(event) => updateMarketingOutputForm("status", event.target.value)}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      >
+                        {marketingOutputStatusOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {formatLabel(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Body</span>
+                      <textarea
+                        value={marketingOutputForm.body}
+                        onChange={(event) => updateMarketingOutputForm("body", event.target.value)}
+                        rows={7}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Short Post</span>
+                      <textarea
+                        value={marketingOutputForm.shortPost ?? ""}
+                        onChange={(event) => updateMarketingOutputForm("shortPost", event.target.value)}
+                        rows={3}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Hashtags</span>
+                      <input
+                        type="text"
+                        value={(marketingOutputForm.hashtags ?? []).join(", ")}
+                        onChange={(event) =>
+                          updateMarketingOutputForm(
+                            "hashtags",
+                            event.target.value
+                              .split(",")
+                              .map((tag) => tag.trim())
+                              .filter(Boolean)
+                          )
+                        }
+                        placeholder="#MamesMeatPies, #CaneRiver"
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Asset Guidance</span>
+                      <textarea
+                        value={marketingOutputForm.assetHint}
+                        onChange={(event) => updateMarketingOutputForm("assetHint", event.target.value)}
+                        rows={3}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <label className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Selected Photos</span>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {marketingAssetOptions.map((asset) => {
+                          const isSelected = marketingOutputForm.selectedAssets.includes(asset);
+
+                          return (
+                            <label
+                              key={asset}
+                              className={`flex items-center gap-3 rounded-[8px] border px-3 py-3 text-sm transition-colors ${
+                                isSelected ? "border-cajun bg-cajun/5 text-foreground" : "border-border bg-background text-muted-foreground"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(event) => {
+                                  const nextAssets = event.target.checked
+                                    ? [...marketingOutputForm.selectedAssets, asset]
+                                    : marketingOutputForm.selectedAssets.filter((value) => value !== asset);
+                                  updateMarketingOutputForm("selectedAssets", nextAssets);
+                                }}
+                                className="h-4 w-4 accent-cajun"
+                              />
+                              <span className="break-all">{asset}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <span className="font-semibold text-foreground">Publish At</span>
+                      <input
+                        type="date"
+                        value={marketingOutputForm.publishAt ?? ""}
+                        onChange={(event) => updateMarketingOutputForm("publishAt", event.target.value)}
+                        className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                      />
+                    </label>
+
+                    <div className="space-y-2 rounded-[8px] border border-border bg-background p-4 text-sm">
+                      <p className="font-semibold text-foreground">Run Metadata</p>
+                      <p className="text-muted-foreground">Run: {selectedMarketingOutput.runLabel}</p>
+                      <p className="text-muted-foreground">Provider: {selectedMarketingOutput.provider}</p>
+                      <p className="text-muted-foreground">
+                        Type: {selectedMarketingOutput.kind === "social" ? "Social Draft" : "Weekly Note"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-border p-5">
+                    {marketingOutputNotice && (
+                      <div className="rounded-[8px] border border-border bg-background px-4 py-3 text-sm text-foreground">
+                        {marketingOutputNotice}
+                      </div>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={marketingOutputSaving}
+                      className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-cajun px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Upload size={15} />
+                      {marketingOutputSaving ? "Saving..." : "Update Draft"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          </div>
+
+          <div className="border border-border bg-card">
+            <div className="border-b border-border p-5">
+              <h3 className="font-serif text-2xl font-bold text-foreground">Content Queue</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Select an item to edit or use it later for social drafts and weekly notes.</p>
+            </div>
+            <div>
+              {!isUnlocked ? (
+                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review the content queue.</p>
+              ) : marketingDraftRows.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground">No content items saved yet. Add your first weekly update or promo above.</p>
+              ) : (
+                marketingDraftRows.map((draft) => (
+                  <button
+                    key={draft._id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMarketingDraftId(draft._id ?? null);
+                      setMarketingDraftNotice(null);
+                    }}
+                    className={`w-full border-b border-border p-4 text-left transition-colors last:border-b-0 hover:bg-muted ${
+                      selectedMarketingDraftId === draft._id ? "bg-muted" : ""
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                        {formatLabel(draft.type)}
+                      </span>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        {formatLabel(draft.priority)}
+                      </span>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        {formatLabel(draft.approvalStatus)}
+                      </span>
+                    </div>
+                    <p className="mt-3 font-semibold text-foreground">{draft.title}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{draft.summary}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {draft.channels.map((channel) => (
+                        <span key={channel} className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                          {channel}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-muted-foreground">
+                      Updated {formatDate(draft.updatedAt)}
+                      {draft.publishBy ? ` • Publish by ${draft.publishBy}` : ""}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="border border-border bg-card p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-serif text-2xl font-bold text-foreground">Audience Segments</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Useful later for campaign targeting once drafts are approved.</p>
+              </div>
+              <div className="flex gap-2">
+                <Mail className="text-cajun" size={18} />
+                <MessageSquare className="text-cajun" size={18} />
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {audienceSegments.map((segment) => (
+                <div key={segment.name} className="border border-border bg-background p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{segment.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{segment.detail}</p>
+                    </div>
+                    <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                      {isUnlocked ? segment.count : "-"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-[8px] border border-border bg-background p-4 text-sm text-muted-foreground">
+              Next step: use this queue as the source for an automated Tuesday social-draft run and a Friday weekly-notes run.
+            </div>
+          </div>
         </div>
       </div>
     </div>

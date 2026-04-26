@@ -11,7 +11,11 @@
 import type * as admin from "../admin.js";
 import type * as analytics from "../analytics.js";
 import type * as contactMessages from "../contactMessages.js";
+import type * as crons from "../crons.js";
 import type * as directMessages from "../directMessages.js";
+import type * as marketingDrafts from "../marketingDrafts.js";
+import type * as marketingGenerator from "../marketingGenerator.js";
+import type * as marketingOutputs from "../marketingOutputs.js";
 import type * as newsletterSubscribers from "../newsletterSubscribers.js";
 import type * as notifications from "../notifications.js";
 import type * as orders from "../orders.js";
@@ -27,7 +31,11 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   analytics: typeof analytics;
   contactMessages: typeof contactMessages;
+  crons: typeof crons;
   directMessages: typeof directMessages;
+  marketingDrafts: typeof marketingDrafts;
+  marketingGenerator: typeof marketingGenerator;
+  marketingOutputs: typeof marketingOutputs;
   newsletterSubscribers: typeof newsletterSubscribers;
   notifications: typeof notifications;
   orders: typeof orders;

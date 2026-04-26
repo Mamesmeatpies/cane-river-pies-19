@@ -103,16 +103,22 @@ export const getInboxForAdmin = action({
           directMessages: [],
           orders: [],
           products: [],
+          marketingDrafts: [],
+          marketingGeneratedPacks: [],
+          marketingOutputs: [],
           analytics: null,
         };
       }
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
-      const [messages, directMessages, orders, products, analytics] = await Promise.all([
+      const [messages, directMessages, orders, products, marketingDrafts, marketingGeneratedPacks, marketingOutputs, analytics] = await Promise.all([
         ctx.runQuery(internal.contactMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.directMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.orders.listLatestInternal, { limit }),
         ctx.runQuery(internal.products.listAllInternal, {}),
+        ctx.runQuery(internal.marketingDrafts.listLatestInternal, { limit: 100 }),
+        ctx.runQuery(internal.marketingGenerator.listLatestGeneratedPacksInternal, { limit: 20 }),
+        ctx.runQuery(internal.marketingOutputs.listLatestInternal, { limit: 100 }),
         ctx.runQuery(internal.analytics.summaryInternal, {}),
       ]);
 
@@ -130,6 +136,9 @@ export const getInboxForAdmin = action({
         directMessages,
         orders,
         products: resolvedProducts,
+        marketingDrafts,
+        marketingGeneratedPacks,
+        marketingOutputs,
         analytics,
       };
     } catch {
@@ -140,6 +149,9 @@ export const getInboxForAdmin = action({
         directMessages: [],
         orders: [],
         products: [],
+        marketingDrafts: [],
+        marketingGeneratedPacks: [],
+        marketingOutputs: [],
         analytics: null,
       };
     }

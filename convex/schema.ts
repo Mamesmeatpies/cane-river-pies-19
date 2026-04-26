@@ -30,6 +30,76 @@ export default defineSchema({
     message: v.string(),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
+  marketingDrafts: defineTable({
+    title: v.string(),
+    type: v.union(
+      v.literal("product"),
+      v.literal("event"),
+      v.literal("promotion"),
+      v.literal("testimonial"),
+      v.literal("founder-story"),
+      v.literal("weekly-update")
+    ),
+    summary: v.string(),
+    facts: v.string(),
+    cta: v.optional(v.string()),
+    channels: v.array(v.string()),
+    assetLinks: v.optional(v.array(v.string())),
+    priority: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
+    publishBy: v.optional(v.string()),
+    approvalStatus: v.union(v.literal("draft"), v.literal("ready"), v.literal("approved"), v.literal("scheduled")),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_approvalStatus_and_updatedAt", ["approvalStatus", "updatedAt"]),
+  marketingGeneratedPacks: defineTable({
+    runLabel: v.string(),
+    provider: v.string(),
+    generatedAt: v.number(),
+    sourceCount: v.number(),
+    socialDrafts: v.array(
+      v.object({
+        title: v.string(),
+        sourceType: v.string(),
+        channelLabel: v.string(),
+        caption: v.string(),
+        shortPost: v.string(),
+        hashtags: v.array(v.string()),
+        assetHint: v.string(),
+      })
+    ),
+    weeklyNote: v.union(
+      v.null(),
+      v.object({
+        title: v.string(),
+        body: v.string(),
+        recapPost: v.string(),
+        followUps: v.array(v.string()),
+      })
+    ),
+  }).index("by_generatedAt", ["generatedAt"]),
+  marketingOutputs: defineTable({
+    packId: v.optional(v.id("marketingGeneratedPacks")),
+    kind: v.union(v.literal("social"), v.literal("weekly-note")),
+    title: v.string(),
+    channelLabel: v.string(),
+    body: v.string(),
+    shortPost: v.optional(v.string()),
+    hashtags: v.optional(v.array(v.string())),
+    assetHint: v.string(),
+    selectedAssets: v.array(v.string()),
+    sourceType: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("approved"), v.literal("scheduled"), v.literal("posted")),
+    publishAt: v.optional(v.string()),
+    provider: v.string(),
+    runLabel: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_status_and_updatedAt", ["status", "updatedAt"]),
   directMessages: defineTable({
     name: v.string(),
     email: v.optional(v.string()),
