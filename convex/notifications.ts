@@ -307,15 +307,15 @@ export const submitOrder = action({
         "If you need to reach us right away, call 800-318-7135.",
       ].join("\n"),
       html: wrapEmailHtml(`
-        <div style="padding:32px 32px 12px;text-align:center;background:linear-gradient(180deg,#4a2d23 0%,#6f4635 100%);color:#fffaf3">
+        <div style="padding:32px 32px 12px;text-align:center;background-color:#6f4635;background:#6f4635;background-image:linear-gradient(180deg,#4a2d23 0%,#6f4635 100%);color:#fffaf3">
           <img
             src="${mamePortraitUrl}"
             alt="Mame, whose family recipe inspires every Cane River Meat Pie"
-            style="width:132px;height:132px;object-fit:cover;border-radius:999px;border:4px solid rgba(245,223,167,0.55);box-shadow:0 10px 30px rgba(0,0,0,0.18)"
+            style="display:block;margin:0 auto;width:132px;height:132px;object-fit:cover;border-radius:999px;border:4px solid rgba(245,223,167,0.55);box-shadow:0 10px 30px rgba(0,0,0,0.18)"
           />
-          <div style="margin-top:16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#f5dfa7">Mame's Legacy</div>
-          <h1 style="margin:10px 0 8px;font-size:30px;line-height:1.2;font-family:Georgia,serif">We received your order</h1>
-          <p style="margin:0 auto 12px;max-width:460px;font-size:16px;line-height:1.6;color:#f8eee0">
+          <div style="margin-top:16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#f1d18a">Mame's Legacy</div>
+          <h1 style="margin:10px 0 8px;font-size:30px;line-height:1.2;font-family:Georgia,serif;color:#fffaf3">We received your order</h1>
+          <p style="margin:0 auto 12px;max-width:460px;font-size:16px;line-height:1.6;color:#f7ead7">
             From Mame's kitchen recipe to your table.
           </p>
         </div>
