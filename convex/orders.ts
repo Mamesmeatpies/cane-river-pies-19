@@ -1,6 +1,9 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const MINI_PRODUCT_ID = "mini";
+const MINI_MINIMUM_DOZENS = 2;
+
 const getAdminAccess = (adminKey: string) => {
   const configuredKey = process.env.ADMIN_PORTAL_KEY;
 
@@ -40,6 +43,14 @@ export const create = mutation({
   handler: async (ctx, args) => {
     if (args.items.length === 0) {
       throw new Error("Cannot create an order with no items.");
+    }
+
+    const miniQuantity = args.items
+      .filter((item) => item.productId === MINI_PRODUCT_ID)
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    if (miniQuantity > 0 && miniQuantity < MINI_MINIMUM_DOZENS) {
+      throw new Error(`Mini pies require a minimum order of ${MINI_MINIMUM_DOZENS} dozen.`);
     }
 
     if (args.status === "submitted") {

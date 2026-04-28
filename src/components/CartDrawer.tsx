@@ -5,6 +5,7 @@ import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { buildStripePaymentLink, hasStripePaymentLink } from "@/lib/stripePaymentLink";
+import { getMiniMinimumOrderMessage, isMiniProduct, MINI_MINIMUM_DOZENS } from "@/lib/productRules";
 
 const STRIPE_CHECKOUT_ENABLED = false;
 
@@ -30,6 +31,8 @@ const CartDrawer = () => {
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
   const [promoEntry, setPromoEntry] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const miniItem = items.find((item) => isMiniProduct(item.id));
+  const miniOrderInvalid = Boolean(miniItem && miniItem.quantity < MINI_MINIMUM_DOZENS);
 
   if (!isOpen) return null;
 
@@ -136,6 +139,10 @@ const CartDrawer = () => {
 
   const handleSubmit = async (e: React.SyntheticEvent, paymentMethod: "stripe" | "email") => {
     e.preventDefault();
+    if (miniOrderInvalid) {
+      toast.error(getMiniMinimumOrderMessage());
+      return;
+    }
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error("Please fill in your name, email, and phone number.");
       return;
@@ -321,10 +328,17 @@ const CartDrawer = () => {
                   <div className="flex-1 min-w-0">
                     <h4 className="font-serif font-bold text-foreground text-sm truncate">{item.name}</h4>
                     <p className="text-cajun font-semibold text-sm">{item.price}</p>
+                    {isMiniProduct(item.id) && (
+                      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Minimum {MINI_MINIMUM_DOZENS} dozen per order
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-2">
                       <div className="flex items-center border border-border rounded-full">
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() =>
+                            updateQuantity(item.id, isMiniProduct(item.id) ? Math.max(MINI_MINIMUM_DOZENS, item.quantity - 1) : item.quantity - 1)
+                          }
                           className="p-1.5 hover:bg-muted rounded-l-full transition-colors"
                         >
                           <Minus size={12} />
@@ -392,6 +406,11 @@ const CartDrawer = () => {
                   </div>
                 )}
               </div>
+              {miniItem && (
+                <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                  {getMiniMinimumOrderMessage()}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -417,10 +436,14 @@ const CartDrawer = () => {
             </div>
             <button
               onClick={() => setShowCheckout(true)}
+              disabled={miniOrderInvalid}
               className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg"
             >
               Order by Email or Phone
             </button>
+            {miniOrderInvalid && (
+              <p className="text-xs leading-relaxed text-destructive">{getMiniMinimumOrderMessage()}</p>
+            )}
             <button
               onClick={backToProducts}
               className="w-full flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
