@@ -1,6 +1,9 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const MINI_PRODUCT_ID = "mini";
+const MINI_PRICE_PER_DOZEN = 15;
+
 const getAdminAccess = (adminKey: string) => {
   const configuredKey = process.env.ADMIN_PORTAL_KEY;
 
@@ -75,12 +78,12 @@ const defaultProducts = [
     imageKey: "turkey",
   },
   {
-    productId: "mini",
+    productId: MINI_PRODUCT_ID,
     name: "Mini Beef & Pork Pies",
     sku: "MAME-MINI-12",
-    description: "Bite-sized perfection - sold in packs of 12. Ideal for parties, events, and snacking.",
+    description: "Bite-sized perfection - sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking.",
     category: "Mini - Pack of 12",
-    price: 20,
+    price: MINI_PRICE_PER_DOZEN,
     cost: 9,
     stock: 8,
     inventoryThreshold: 10,

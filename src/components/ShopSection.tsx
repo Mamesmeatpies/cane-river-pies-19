@@ -4,6 +4,13 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
+import {
+  getEffectiveUnitPrice,
+  getMinimumQuantity,
+  getMiniMinimumOrderMessage,
+  isMiniProduct,
+  MINI_MINIMUM_DOZENS,
+} from "@/lib/productRules";
 // @ts-ignore
 import beefPorkImg from "@/assets/product-beef-pork.jpg?v=2";
 // @ts-ignore
@@ -59,11 +66,11 @@ const fallbackProducts: Product[] = [
   {
     id: "mini",
     name: "Mini Beef & Pork Pies",
-    description: "Bite-sized perfection — sold in packs of 12. Ideal for parties, events, and snacking.",
+    description: "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking.",
     image: miniImg,
     category: "Mini · Pack of 12",
-    price: "$20 / dozen",
-    priceNum: 20,
+    price: "$15 / dozen",
+    priceNum: 15,
   },
 ];
 
@@ -73,7 +80,8 @@ const formatProductPrice = (price: number, category: string) => {
 };
 
 const ProductCard = ({ product }: { product: Product }) => {
-  const [qty, setQty] = useState(1);
+  const minimumQuantity = getMinimumQuantity(product.id);
+  const [qty, setQty] = useState(minimumQuantity);
   const { addItem } = useCart();
 
   const handleAdd = () => {
@@ -82,7 +90,7 @@ const ProductCard = ({ product }: { product: Product }) => {
       qty
     );
     toast.success(`${qty}x ${product.name} added to cart`);
-    setQty(1);
+    setQty(minimumQuantity);
   };
 
   return (
@@ -104,11 +112,16 @@ const ProductCard = ({ product }: { product: Product }) => {
         <h3 className="mb-2 font-serif text-lg font-bold text-foreground sm:text-xl">{product.name}</h3>
         <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{product.description}</p>
         <p className="mb-4 text-2xl font-bold text-cajun">{product.price}</p>
+        {isMiniProduct(product.id) && (
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Minimum order: {MINI_MINIMUM_DOZENS} dozen
+          </p>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="flex items-center justify-center rounded-full border border-border sm:justify-start">
             <button
-              onClick={() => setQty(Math.max(1, qty - 1))}
+              onClick={() => setQty(Math.max(minimumQuantity, qty - 1))}
               className="p-2 hover:bg-muted rounded-l-full transition-colors"
               aria-label="Decrease quantity"
             >
@@ -163,11 +176,13 @@ const LiveProductGrid = () => {
       ? liveProducts.map((product) => ({
           id: product.productId,
           name: product.name,
-          description: product.description,
+          description: isMiniProduct(product.productId)
+            ? "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking."
+            : product.description,
           image: productImages[product.imageKey] ?? productImages["beef-pork"],
           category: product.category,
-          price: formatProductPrice(product.price, product.category),
-          priceNum: product.price,
+          price: formatProductPrice(getEffectiveUnitPrice(product.productId, product.price), product.category),
+          priceNum: getEffectiveUnitPrice(product.productId, product.price),
         }))
       : fallbackProducts;
 
@@ -189,6 +204,9 @@ const ShopSection = () => {
           <p className="mx-auto mt-4 max-w-2xl text-sm font-medium text-foreground sm:text-base">
             Orders are currently handled by email or phone at 800-318-7135 for Houston, TX; Natchitoches, LA; Baton
             Rouge, LA; Little Rock, Arkansas; and surrounding areas.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:text-sm">
+            {getMiniMinimumOrderMessage()}
           </p>
         </div>
 

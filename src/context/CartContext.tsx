@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { AppliedPromo, getAppliedPromo, normalizePromoCode } from "@/lib/promos";
+import { getEffectiveUnitPrice, getMinimumQuantity } from "@/lib/productRules";
 
 export interface CartItem {
   id: string;
@@ -43,13 +44,26 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const addItem = (item: Omit<CartItem, "quantity">, qty: number) => {
     setItems((prev) => {
+      const minimumQuantity = getMinimumQuantity(item.id);
+      const nextQuantity = Math.max(minimumQuantity, qty);
+      const normalizedItem = {
+        ...item,
+        priceNum: getEffectiveUnitPrice(item.id, item.priceNum),
+      };
       const existing = prev.find((i) => i.id === item.id);
       if (existing) {
         return prev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + qty } : i
+          i.id === item.id
+            ? {
+                ...i,
+                priceNum: normalizedItem.priceNum,
+                price: normalizedItem.price,
+                quantity: i.quantity + nextQuantity,
+              }
+            : i
         );
       }
-      return [...prev, { ...item, quantity: qty }];
+      return [...prev, { ...normalizedItem, quantity: nextQuantity }];
     });
     setIsOpen(true);
   };
@@ -58,9 +72,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
 
   const updateQuantity = (id: string, qty: number) => {
+    const minimumQuantity = getMinimumQuantity(id);
     if (qty < 1) return removeItem(id);
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i))
+      prev.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              priceNum: getEffectiveUnitPrice(i.id, i.priceNum),
+              quantity: Math.max(minimumQuantity, qty),
+            }
+          : i
+      )
     );
   };
 
