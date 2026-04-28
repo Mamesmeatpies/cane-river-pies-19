@@ -287,8 +287,8 @@ export const submitOrder = action({
       text: [
         `Hi ${args.name},`,
         "",
-        "Thanks for your order with Mame's Meat Pies. We received it and will follow up soon with next steps.",
-        "Thank you for trying Mame's Cane River Meat Pies. We appreciate your business. Please enjoy!",
+        "Thank you for your order with Mame's Meat Pies.",
+        "We will contact you regarding pick up or delivery.",
         "",
         "Order summary:",
         orderLines,
@@ -322,12 +322,12 @@ export const submitOrder = action({
         <div style="padding:28px 32px 32px">
           <p style="margin:0 0 16px;font-size:16px">Hi ${escapeHtml(args.name)},</p>
           <p style="margin:0 0 14px;font-size:16px">
-            Thanks for your order with Mame's Meat Pies. We received it and will follow up soon with next steps.
+            Thank you for your order with Mame's Meat Pies.
           </p>
           <div style="margin:20px 0;padding:18px 20px;border-radius:16px;background:#f7f1e8;border:1px solid #eadbc8">
             <p style="margin:0 0 10px;font-size:17px;font-family:Georgia,serif;color:#6f4635">A note from Mame's table</p>
             <p style="margin:0;font-size:16px;color:#3a2d26">
-              Thank you for trying Mame's Cane River Meat Pies. We appreciate your business. Please enjoy!
+              Thank you, and we will contact you regarding pick up or delivery.
             </p>
           </div>
           <div style="margin-top:22px;padding:20px;border-radius:16px;background:#fff;border:1px solid #eadbc8">
