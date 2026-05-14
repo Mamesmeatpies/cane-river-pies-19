@@ -602,6 +602,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
   const createProduct = useMutation(api.products.createForAdmin);
   const updateProduct = useMutation(api.products.updateForAdmin);
+  const seedDefaultProducts = useMutation(api.products.seedDefaultProducts);
   const createMarketingDraft = useMutation(api.marketingDrafts.createForAdmin);
   const updateMarketingDraft = useMutation(api.marketingDrafts.updateForAdmin);
   const updateMarketingOutput = useMutation(api.marketingOutputs.updateForAdmin);
@@ -685,6 +686,14 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
   const showPasswordFallback = !isUsingPassword && (!isUnlocked || Boolean(inboxError));
+
+  useEffect(() => {
+    if (!fallbackKey || productResult?.access !== "granted") {
+      return;
+    }
+
+    void seedDefaultProducts({ adminKey: fallbackKey });
+  }, [fallbackKey, productResult?.access, seedDefaultProducts]);
 
   const loadInbox = useCallback(async () => {
     if (!user) {
@@ -3347,6 +3356,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               <option value="spicy">Spicy</option>
               <option value="turkey">Turkey</option>
               <option value="mini">Mini Pies</option>
+              <option value="mini-unfried">Mini Pies Unfried</option>
             </select>
           </label>
           <label className="grid gap-2 text-sm font-semibold text-foreground">

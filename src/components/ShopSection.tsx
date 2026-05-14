@@ -33,6 +33,7 @@ const productImages: Record<string, string> = {
   spicy: spicyImg,
   turkey: turkeyImg,
   mini: miniImg,
+  "mini-unfried": miniImg,
 };
 
 const fallbackProducts: Product[] = [
