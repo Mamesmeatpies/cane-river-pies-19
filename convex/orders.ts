@@ -1,7 +1,7 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-const MINI_PRODUCT_ID = "mini";
+const MINI_PRODUCT_IDS = new Set(["mini", "mini-unfried"]);
 const MINI_MINIMUM_DOZENS = 2;
 
 const getAdminAccess = (adminKey: string) => {
@@ -46,7 +46,7 @@ export const create = mutation({
     }
 
     const miniQuantity = args.items
-      .filter((item) => item.productId === MINI_PRODUCT_ID)
+      .filter((item) => MINI_PRODUCT_IDS.has(item.productId))
       .reduce((sum, item) => sum + item.quantity, 0);
 
     if (miniQuantity > 0 && miniQuantity < MINI_MINIMUM_DOZENS) {

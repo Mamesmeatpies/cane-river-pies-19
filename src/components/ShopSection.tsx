@@ -72,6 +72,15 @@ const fallbackProducts: Product[] = [
     price: "$15 / dozen",
     priceNum: 15,
   },
+  {
+    id: "mini-unfried",
+    name: "Mini Beef & Pork Pies (Unfried)",
+    description: "All the flavor of our mini pies in an unfried pack of 12, ready for your fryer or oven at home. Minimum order: 2 dozen.",
+    image: miniImg,
+    category: "Mini · Unfried Pack of 12",
+    price: "$15 / dozen",
+    priceNum: 15,
+  },
 ];
 
 const formatProductPrice = (price: number, category: string) => {
@@ -176,9 +185,7 @@ const LiveProductGrid = () => {
       ? liveProducts.map((product) => ({
           id: product.productId,
           name: product.name,
-          description: isMiniProduct(product.productId)
-            ? "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking."
-            : product.description,
+          description: product.description,
           image: productImages[product.imageKey] ?? productImages["beef-pork"],
           category: product.category,
           price: formatProductPrice(getEffectiveUnitPrice(product.productId, product.price), product.category),
