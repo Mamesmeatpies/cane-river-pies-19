@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 
 const MINI_PRODUCT_ID = "mini";
+const MINI_UNFRIED_PRODUCT_ID = "mini-unfried";
 const MINI_PRICE_PER_DOZEN = 15;
 
 const getAdminAccess = (adminKey: string) => {
@@ -89,6 +90,20 @@ const defaultProducts = [
     inventoryThreshold: 10,
     status: "low_stock" as const,
     variants: ["Mini", "Beef & Pork"],
+    imageKey: "mini",
+  },
+  {
+    productId: MINI_UNFRIED_PRODUCT_ID,
+    name: "Mini Beef & Pork Pies (Unfried)",
+    sku: "MAME-MINI-UF-12",
+    description: "All the flavor of our mini pies in an unfried pack of 12, ready for your fryer or oven at home. Minimum order: 2 dozen.",
+    category: "Mini - Unfried Pack of 12",
+    price: MINI_PRICE_PER_DOZEN,
+    cost: 9,
+    stock: 8,
+    inventoryThreshold: 10,
+    status: "low_stock" as const,
+    variants: ["Mini", "Unfried", "Beef & Pork"],
     imageKey: "mini",
   },
 ];
