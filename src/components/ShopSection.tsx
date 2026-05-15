@@ -42,6 +42,7 @@ const productImages: Record<string, string> = {
   spicy: spicyImg,
   turkey: turkeyImg,
   mini: miniImg,
+  "mini-unfried": miniImg,
 };
 
 const fallbackProducts: Product[] = [
@@ -78,6 +79,15 @@ const fallbackProducts: Product[] = [
     description: "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking.",
     image: miniImg,
     category: "Mini · Pack of 12",
+    price: "$15 / dozen",
+    priceNum: 15,
+  },
+  {
+    id: "mini-unfried",
+    name: "Mini Beef & Pork Pies (Unfried)",
+    description: "All the flavor of our mini pies in an unfried pack of 12, ready for your fryer or oven at home. Minimum order: 2 dozen.",
+    image: miniImg,
+    category: "Mini · Unfried Pack of 12",
     price: "$15 / dozen",
     priceNum: 15,
   },
