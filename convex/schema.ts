@@ -69,6 +69,7 @@ export default defineSchema({
     sourceCount: v.number(),
     socialDrafts: v.array(
       v.object({
+        sourceId: v.optional(v.id("marketingDrafts")),
         title: v.string(),
         sourceType: v.string(),
         channelLabel: v.string(),
