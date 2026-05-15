@@ -28,6 +28,15 @@ interface Product {
   priceNum: number;
 }
 
+type LiveProduct = {
+  productId: string;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  imageKey: string;
+};
+
 const productImages: Record<string, string> = {
   "beef-pork": beefPorkImg,
   spicy: spicyImg,
@@ -77,6 +86,28 @@ const fallbackProducts: Product[] = [
 const formatProductPrice = (price: number, category: string) => {
   const unit = category.toLowerCase().includes("mini") ? "dozen" : "dozen";
   return `$${price} / ${unit}`;
+};
+
+const mapLiveProduct = (product: LiveProduct): Product => ({
+  id: product.productId,
+  name: product.name,
+  description: product.description,
+  image: productImages[product.imageKey] ?? productImages["beef-pork"],
+  category: product.category,
+  price: formatProductPrice(getEffectiveUnitPrice(product.productId, product.price), product.category),
+  priceNum: getEffectiveUnitPrice(product.productId, product.price),
+});
+
+const mergeWithFallbackProducts = (products: Product[]) => {
+  const mergedProducts = new Map(products.map((product) => [product.id, product]));
+
+  for (const fallbackProduct of fallbackProducts) {
+    if (!mergedProducts.has(fallbackProduct.id)) {
+      mergedProducts.set(fallbackProduct.id, fallbackProduct);
+    }
+  }
+
+  return Array.from(mergedProducts.values());
 };
 
 const ProductCard = ({ product }: { product: Product }) => {
@@ -173,17 +204,14 @@ const LiveProductGrid = () => {
   const liveProducts = useQuery(api.products.listActive);
   const products =
     liveProducts && liveProducts.length > 0
-      ? liveProducts.map((product) => ({
-          id: product.productId,
-          name: product.name,
-          description: isMiniProduct(product.productId)
-            ? "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking."
-            : product.description,
-          image: productImages[product.imageKey] ?? productImages["beef-pork"],
-          category: product.category,
-          price: formatProductPrice(getEffectiveUnitPrice(product.productId, product.price), product.category),
-          priceNum: getEffectiveUnitPrice(product.productId, product.price),
-        }))
+      ? mergeWithFallbackProducts(
+          liveProducts.map((product) => ({
+            ...mapLiveProduct(product),
+            description: isMiniProduct(product.productId)
+              ? "Bite-sized perfection — sold in packs of 12 with a 2-dozen minimum. Ideal for parties, events, and snacking."
+              : product.description,
+          }))
+        )
       : fallbackProducts;
 
   return <ProductGrid products={products} />;
