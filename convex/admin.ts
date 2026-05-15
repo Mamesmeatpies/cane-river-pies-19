@@ -111,6 +111,8 @@ export const getInboxForAdmin = action({
       }
 
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
+      await ctx.runMutation(internal.products.seedDefaultsInternal, {});
+
       const [messages, directMessages, orders, products, marketingDrafts, marketingGeneratedPacks, marketingOutputs, analytics] = await Promise.all([
         ctx.runQuery(internal.contactMessages.listLatestInternal, { limit }),
         ctx.runQuery(internal.directMessages.listLatestInternal, { limit }),
@@ -122,20 +124,13 @@ export const getInboxForAdmin = action({
         ctx.runQuery(internal.analytics.summaryInternal, {}),
       ]);
 
-      let resolvedProducts = products;
-
-      if (resolvedProducts.length === 0) {
-        await ctx.runMutation(internal.products.seedDefaultsInternal, {});
-        resolvedProducts = await ctx.runQuery(internal.products.listAllInternal, {});
-      }
-
       return {
         access: auth.access,
         user: auth.user,
         messages,
         directMessages,
         orders,
-        products: resolvedProducts,
+        products,
         marketingDrafts,
         marketingGeneratedPacks,
         marketingOutputs,
