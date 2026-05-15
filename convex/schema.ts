@@ -1,6 +1,13 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const marketingAssetUpload = v.object({
+  storageId: v.id("_storage"),
+  fileName: v.string(),
+  contentType: v.optional(v.string()),
+  url: v.optional(v.union(v.string(), v.null())),
+});
+
 export default defineSchema({
   analyticsEvents: defineTable({
     route: v.string(),
@@ -45,6 +52,7 @@ export default defineSchema({
     cta: v.optional(v.string()),
     channels: v.array(v.string()),
     assetLinks: v.optional(v.array(v.string())),
+    assetUploads: v.optional(v.array(marketingAssetUpload)),
     priority: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
     publishBy: v.optional(v.string()),
     approvalStatus: v.union(v.literal("draft"), v.literal("ready"), v.literal("approved"), v.literal("scheduled")),

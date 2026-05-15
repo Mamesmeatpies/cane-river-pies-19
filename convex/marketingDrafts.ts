@@ -1,6 +1,13 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const marketingAssetUpload = v.object({
+  storageId: v.id("_storage"),
+  fileName: v.string(),
+  contentType: v.optional(v.string()),
+  url: v.optional(v.union(v.string(), v.null())),
+});
+
 const getAdminAccess = (adminKey: string) => {
   const configuredKey = process.env.ADMIN_PORTAL_KEY;
 
@@ -30,6 +37,7 @@ const marketingDraftFields = {
   cta: v.optional(v.string()),
   channels: v.array(v.string()),
   assetLinks: v.optional(v.array(v.string())),
+  assetUploads: v.optional(v.array(marketingAssetUpload)),
   priority: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
   publishBy: v.optional(v.string()),
   approvalStatus: v.union(v.literal("draft"), v.literal("ready"), v.literal("approved"), v.literal("scheduled")),
