@@ -91,6 +91,7 @@ export default defineSchema({
   }).index("by_generatedAt", ["generatedAt"]),
   marketingOutputs: defineTable({
     packId: v.optional(v.id("marketingGeneratedPacks")),
+    sourceDraftId: v.optional(v.id("marketingDrafts")),
     kind: v.union(v.literal("social"), v.literal("weekly-note")),
     title: v.string(),
     channelLabel: v.string(),
