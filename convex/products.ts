@@ -215,6 +215,29 @@ export const createForAdmin = mutation({
   },
 });
 
+export const seedDefaultsForAdmin = mutation({
+  args: {
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const access = getAdminAccess(args.adminKey);
+
+    if (access !== "granted") {
+      return {
+        access,
+        seeded: 0,
+      };
+    }
+
+    const result = await ctx.runMutation(internal.products.seedDefaultsInternal, {});
+
+    return {
+      access,
+      seeded: result.seeded,
+    };
+  },
+});
+
 export const updateForAdmin = mutation({
   args: {
     adminKey: v.string(),

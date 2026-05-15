@@ -601,6 +601,7 @@ type AdminPortalAuthProps = {
 const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user }: AdminPortalAuthProps) => {
   const getInboxForAdmin = useAction(api.admin.getInboxForAdmin);
   const createProduct = useMutation(api.products.createForAdmin);
+  const seedDefaultProducts = useMutation(api.products.seedDefaultsForAdmin);
   const updateProduct = useMutation(api.products.updateForAdmin);
   const createMarketingDraft = useMutation(api.marketingDrafts.createForAdmin);
   const updateMarketingDraft = useMutation(api.marketingDrafts.updateForAdmin);
@@ -708,6 +709,14 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    if (!fallbackKey) {
+      return;
+    }
+
+    void seedDefaultProducts({ adminKey: fallbackKey }).catch(() => undefined);
+  }, [fallbackKey, seedDefaultProducts]);
 
   useEffect(() => {
     const productRows = isUsingPassword ? productResult?.products : adminResult?.products;
