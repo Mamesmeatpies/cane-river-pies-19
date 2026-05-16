@@ -1001,7 +1001,6 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           tags.add("Wholesale");
         }
 
-        salesperson: order.salesperson,
         if (/\b(event|wedding|festival|party|catering|corporate)\b/.test(combinedNotes)) {
           tags.add("Event Buyer");
         }
@@ -3870,6 +3869,3 @@ const Admin = () => {
 };
 
 export default Admin;
-                    <div className="border border-border bg-background p-3">
-                      <p className="text-xs font-bold uppercase text-muted-foreground">Salesperson</p>
-                      <p className="mt-1 text-sm font-semibold">{activeItem.salesperson || "Not provided"}</p>
