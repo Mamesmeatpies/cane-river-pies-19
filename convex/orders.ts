@@ -3,6 +3,20 @@ import { v } from "convex/values";
 
 const MINI_PRODUCT_IDS = new Set(["mini", "mini-unfried"]);
 const MINI_MINIMUM_DOZENS = 2;
+const fulfillmentStatusValidator = v.union(
+  v.literal("new"),
+  v.literal("confirmed"),
+  v.literal("in_kitchen"),
+  v.literal("ready"),
+  v.literal("completed"),
+  v.literal("canceled")
+);
+const fulfillmentMethodValidator = v.union(
+  v.literal("pickup"),
+  v.literal("delivery"),
+  v.literal("event"),
+  v.literal("unknown")
+);
 
 const getAdminAccess = (adminKey: string) => {
   const configuredKey = process.env.ADMIN_PORTAL_KEY;
@@ -21,12 +35,18 @@ const getAdminAccess = (adminKey: string) => {
 export const create = mutation({
   args: {
     name: v.string(),
-    email: v.string(),
+    email: v.optional(v.string()),
     phone: v.string(),
+    preferredContactMethod: v.union(v.literal("email"), v.literal("phone")),
     salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     paymentMethod: v.union(v.literal("stripe"), v.literal("email")),
     status: v.union(v.literal("checkout_started"), v.literal("submitted")),
+    fulfillmentStatus: v.optional(fulfillmentStatusValidator),
+    fulfillmentMethod: v.optional(fulfillmentMethodValidator),
+    neededBy: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
     items: v.array(
       v.object({
         productId: v.string(),
@@ -39,11 +59,24 @@ export const create = mutation({
     subtotal: v.optional(v.number()),
     promoCode: v.optional(v.string()),
     promoDiscount: v.optional(v.number()),
+    promoSource: v.optional(v.string()),
+    promoCampaign: v.optional(v.string()),
     total: v.number(),
   },
   handler: async (ctx, args) => {
     if (args.items.length === 0) {
       throw new Error("Cannot create an order with no items.");
+    }
+
+    const email = args.email?.trim();
+    const phone = args.phone.trim();
+
+    if (!phone) {
+      throw new Error("Phone number is required.");
+    }
+
+    if (args.preferredContactMethod === "email" && !email) {
+      throw new Error("Email is required when email is the preferred contact method.");
     }
 
     const miniQuantity = args.items
@@ -86,9 +119,19 @@ export const create = mutation({
       }
     }
 
+    const now = Date.now();
+
     return await ctx.db.insert("orders", {
       ...args,
-      createdAt: Date.now(),
+      email,
+      phone,
+      fulfillmentStatus: args.fulfillmentStatus ?? "new",
+      fulfillmentMethod: args.fulfillmentMethod ?? "unknown",
+      neededBy: args.neededBy,
+      assignedTo: args.assignedTo,
+      internalNotes: args.internalNotes,
+      lastFulfillmentUpdateAt: now,
+      createdAt: now,
     });
   },
 });
@@ -134,5 +177,39 @@ export const listLatestInternal = internalQuery({
       .withIndex("by_createdAt")
       .order("desc")
       .take(limit);
+  },
+});
+
+export const updateFulfillmentForAdmin = mutation({
+  args: {
+    adminKey: v.string(),
+    id: v.id("orders"),
+    fulfillmentStatus: fulfillmentStatusValidator,
+    fulfillmentMethod: fulfillmentMethodValidator,
+    neededBy: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const access = getAdminAccess(args.adminKey);
+
+    if (access !== "granted") {
+      return {
+        access,
+      };
+    }
+
+    await ctx.db.patch(args.id, {
+      fulfillmentStatus: args.fulfillmentStatus,
+      fulfillmentMethod: args.fulfillmentMethod,
+      neededBy: args.neededBy,
+      assignedTo: args.assignedTo,
+      internalNotes: args.internalNotes,
+      lastFulfillmentUpdateAt: Date.now(),
+    });
+
+    return {
+      access,
+    };
   },
 });

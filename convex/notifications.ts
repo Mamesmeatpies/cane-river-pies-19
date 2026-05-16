@@ -105,6 +105,25 @@ const sendCustomerEmail = (email: string, message: Omit<Parameters<typeof sendRe
     replyTo: notificationEmail,
   });
 
+const buildOrderReplyMessage = ({
+  name,
+  orderLines,
+  total,
+}: {
+  name: string;
+  orderLines: string;
+  total: number;
+}) =>
+  [
+    `Thank you for your purchase, ${name}!`,
+    "Mame's Cane River Meatpies.",
+    "",
+    "Order:",
+    orderLines,
+    "",
+    `Sales price: ${formatCurrency(total)}`,
+  ].join("\n");
+
 export const submitContactMessage = action({
   args: {
     name: v.string(),
@@ -233,19 +252,35 @@ export const submitNewsletterSignup = action({
 export const submitOrder = action({
   args: {
     name: v.string(),
-    email: v.string(),
+    email: v.optional(v.string()),
     phone: v.string(),
+    preferredContactMethod: v.union(v.literal("email"), v.literal("phone")),
     salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     items: v.array(orderItemValidator),
     subtotal: v.optional(v.number()),
     promoCode: v.optional(v.string()),
     promoDiscount: v.optional(v.number()),
+    promoSource: v.optional(v.string()),
+    promoCampaign: v.optional(v.string()),
     total: v.number(),
   },
   handler: async (ctx, args) => {
+    const email = args.email?.trim();
+    const phone = args.phone.trim();
+
+    if (!phone) {
+      throw new Error("Phone number is required.");
+    }
+
+    if (args.preferredContactMethod === "email" && !email) {
+      throw new Error("Email is required when email is the preferred contact method.");
+    }
+
     const orderId = await ctx.runMutation(api.orders.create, {
       ...args,
+      email,
+      phone,
       paymentMethod: "email",
       status: "submitted",
     });
@@ -259,14 +294,20 @@ export const submitOrder = action({
       )
       .join("\n");
     const salespersonLine = args.salesperson?.trim() ? `Salesperson: ${args.salesperson.trim()}` : null;
+    const customerReplyMessage = buildOrderReplyMessage({
+      name: args.name,
+      orderLines,
+      total: args.total,
+    });
 
     const notificationSent = await sendAdminEmail({
       subject: `New Mame's Meat Pie order from ${args.name}`,
-      replyTo: args.email,
+      replyTo: email ?? notificationEmail,
       text: [
         `New order from ${args.name}`,
-        `Email: ${args.email}`,
-        `Phone: ${args.phone}`,
+        `Preferred contact: ${args.preferredContactMethod === "phone" ? "Cell phone" : "Email"}`,
+        `Email: ${email ?? "Not provided"}`,
+        `Phone: ${phone}`,
         salespersonLine,
         "",
         "Items:",
@@ -276,6 +317,8 @@ export const submitOrder = action({
           ? [
               `Subtotal: ${formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0))}`,
               `Promo: ${args.promoCode} (-${formatCurrency(args.promoDiscount ?? 0)})`,
+              `Promo source: ${args.promoSource ?? "Not provided"}`,
+              `Promo campaign: ${args.promoCampaign ?? "Not provided"}`,
               "",
             ]
           : []),
@@ -285,81 +328,83 @@ export const submitOrder = action({
       ].join("\n"),
     });
 
-    const customerEmailSent = await sendCustomerEmail(args.email, {
-      subject: "We received your order",
-      text: [
-        `Hi ${args.name},`,
-        "",
-        "Thank you for your order with Mame's Meat Pies.",
-        "We will contact you regarding pick up or delivery.",
-        ...(salespersonLine ? ["", salespersonLine] : []),
-        "",
-        "Order summary:",
-        orderLines,
-        "",
-        ...(args.promoCode
-          ? [
-              `Subtotal: ${formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0))}`,
-              `Promo: ${args.promoCode} (-${formatCurrency(args.promoDiscount ?? 0)})`,
-              "",
-            ]
-          : []),
-        `Total: ${formatCurrency(args.total)}`,
-        "",
-        `Notes: ${args.notes ?? "None"}`,
-        "",
-        "If you need to reach us right away, call 800-318-7135.",
-      ].join("\n"),
-      html: wrapEmailHtml(`
-        <div style="padding:32px 32px 12px;text-align:center;background-color:#6f4635;background:#6f4635;background-image:linear-gradient(180deg,#4a2d23 0%,#6f4635 100%);color:#fffaf3">
-          <img
-            src="${mamePortraitUrl}"
-            alt="Mame, whose family recipe inspires every Cane River Meat Pie"
-            style="display:block;margin:0 auto;width:132px;height:132px;object-fit:cover;border-radius:999px;border:4px solid rgba(245,223,167,0.55);box-shadow:0 10px 30px rgba(0,0,0,0.18)"
-          />
-          <div style="margin-top:16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#f1d18a">Mame's Legacy</div>
-          <h1 style="margin:10px 0 8px;font-size:30px;line-height:1.2;font-family:Georgia,serif;color:#fffaf3">We received your order</h1>
-          <p style="margin:0 auto 12px;max-width:460px;font-size:16px;line-height:1.6;color:#f7ead7">
-            From Mame's kitchen recipe to your table.
-          </p>
-        </div>
-        <div style="padding:28px 32px 32px">
-          <p style="margin:0 0 16px;font-size:16px">Hi ${escapeHtml(args.name)},</p>
-          <p style="margin:0 0 14px;font-size:16px">
-            Thank you for your order with Mame's Meat Pies.
-          </p>
-          <div style="margin:20px 0;padding:18px 20px;border-radius:16px;background:#f7f1e8;border:1px solid #eadbc8">
-            <p style="margin:0 0 10px;font-size:17px;font-family:Georgia,serif;color:#6f4635">A note from Mame's table</p>
-            <p style="margin:0;font-size:16px;color:#3a2d26">
-              Thank you, and we will contact you regarding pick up or delivery.
-            </p>
-          </div>
-          <div style="margin-top:22px;padding:20px;border-radius:16px;background:#fff;border:1px solid #eadbc8">
-            <p style="margin:0 0 12px;font-size:17px;font-family:Georgia,serif;color:#2a211c">Order summary</p>
-            <p style="margin:0;font-size:15px;white-space:pre-line;color:#4b3a31">${textToHtml(orderLines)}</p>
-            ${
-              args.salesperson?.trim()
-                ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">Salesperson: ${escapeHtml(args.salesperson.trim())}</p>`
-                : ""
-            }
-            ${
-              args.promoCode
-                ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">
-                    Subtotal: ${escapeHtml(formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0)))}<br />
-                    Promo: ${escapeHtml(args.promoCode)} (-${escapeHtml(formatCurrency(args.promoDiscount ?? 0))})
-                  </p>`
-                : ""
-            }
-            <p style="margin:14px 0 0;font-size:16px;font-weight:700;color:#2a211c">Total: ${escapeHtml(formatCurrency(args.total))}</p>
-            <p style="margin:10px 0 0;font-size:15px;color:#4b3a31">Notes: ${escapeHtml(args.notes ?? "None")}</p>
-          </div>
-          <p style="margin:22px 0 0;font-size:15px;color:#4b3a31">
-            If you need to reach us right away, call <a href="tel:8003187135" style="color:#9f3b27;text-decoration:none">800-318-7135</a>.
-          </p>
-        </div>
-      `),
-    });
+    const customerEmailSent = email
+      ? await sendCustomerEmail(email, {
+          subject: "We received your order",
+          text: [
+            `Hi ${args.name},`,
+            "",
+            "Thank you for your order with Mame's Meat Pies.",
+            "We will contact you regarding pick up or delivery.",
+            ...(salespersonLine ? ["", salespersonLine] : []),
+            "",
+            "Order summary:",
+            orderLines,
+            "",
+            ...(args.promoCode
+              ? [
+                  `Subtotal: ${formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0))}`,
+                  `Promo: ${args.promoCode} (-${formatCurrency(args.promoDiscount ?? 0)})`,
+                  "",
+                ]
+              : []),
+            `Total: ${formatCurrency(args.total)}`,
+            "",
+            `Notes: ${args.notes ?? "None"}`,
+            "",
+            "If you need to reach us right away, call 800-318-7135.",
+          ].join("\n"),
+          html: wrapEmailHtml(`
+            <div style="padding:32px 32px 12px;text-align:center;background-color:#6f4635;background:#6f4635;background-image:linear-gradient(180deg,#4a2d23 0%,#6f4635 100%);color:#fffaf3">
+              <img
+                src="${mamePortraitUrl}"
+                alt="Mame, whose family recipe inspires every Cane River Meat Pie"
+                style="display:block;margin:0 auto;width:132px;height:132px;object-fit:cover;border-radius:999px;border:4px solid rgba(245,223,167,0.55);box-shadow:0 10px 30px rgba(0,0,0,0.18)"
+              />
+              <div style="margin-top:16px;font-size:14px;letter-spacing:0.18em;text-transform:uppercase;color:#f1d18a">Mame's Legacy</div>
+              <h1 style="margin:10px 0 8px;font-size:30px;line-height:1.2;font-family:Georgia,serif;color:#fffaf3">We received your order</h1>
+              <p style="margin:0 auto 12px;max-width:460px;font-size:16px;line-height:1.6;color:#f7ead7">
+                From Mame's kitchen recipe to your table.
+              </p>
+            </div>
+            <div style="padding:28px 32px 32px">
+              <p style="margin:0 0 16px;font-size:16px">Hi ${escapeHtml(args.name)},</p>
+              <p style="margin:0 0 14px;font-size:16px">
+                Thank you for your order with Mame's Meat Pies.
+              </p>
+              <div style="margin:20px 0;padding:18px 20px;border-radius:16px;background:#f7f1e8;border:1px solid #eadbc8">
+                <p style="margin:0 0 10px;font-size:17px;font-family:Georgia,serif;color:#6f4635">A note from Mame's table</p>
+                <p style="margin:0;font-size:16px;color:#3a2d26">
+                  Thank you, and we will contact you regarding pick up or delivery.
+                </p>
+              </div>
+              <div style="margin-top:22px;padding:20px;border-radius:16px;background:#fff;border:1px solid #eadbc8">
+                <p style="margin:0 0 12px;font-size:17px;font-family:Georgia,serif;color:#2a211c">Order summary</p>
+                <p style="margin:0;font-size:15px;white-space:pre-line;color:#4b3a31">${textToHtml(orderLines)}</p>
+                ${
+                  args.salesperson?.trim()
+                    ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">Salesperson: ${escapeHtml(args.salesperson.trim())}</p>`
+                    : ""
+                }
+                ${
+                  args.promoCode
+                    ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">
+                        Subtotal: ${escapeHtml(formatCurrency(args.subtotal ?? args.total + (args.promoDiscount ?? 0)))}<br />
+                        Promo: ${escapeHtml(args.promoCode)} (-${escapeHtml(formatCurrency(args.promoDiscount ?? 0))})
+                      </p>`
+                    : ""
+                }
+                <p style="margin:14px 0 0;font-size:16px;font-weight:700;color:#2a211c">Total: ${escapeHtml(formatCurrency(args.total))}</p>
+                <p style="margin:10px 0 0;font-size:15px;color:#4b3a31">Notes: ${escapeHtml(args.notes ?? "None")}</p>
+              </div>
+              <p style="margin:22px 0 0;font-size:15px;color:#4b3a31">
+                If you need to reach us right away, call <a href="tel:8003187135" style="color:#9f3b27;text-decoration:none">800-318-7135</a>.
+              </p>
+            </div>
+          `),
+        })
+      : false;
 
-    return { orderId, notificationSent, customerEmailSent };
+    return { orderId, notificationSent, customerEmailSent, customerReplyMessage };
   },
 });
