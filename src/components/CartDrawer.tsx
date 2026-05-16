@@ -28,7 +28,7 @@ const CartDrawer = () => {
   const createOrder = useMutation(api.orders.create);
   const submitOrder = useAction(api.notifications.submitOrder);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", salesperson: "", notes: "" });
   const [promoEntry, setPromoEntry] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const miniItem = items.find((item) => isMiniProduct(item.id));
@@ -68,6 +68,7 @@ const CartDrawer = () => {
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
+      salesperson: form.salesperson.trim() || undefined,
       notes: form.notes.trim() || undefined,
       paymentMethod,
       status: paymentMethod === "stripe" ? "checkout_started" : "submitted",
@@ -90,6 +91,7 @@ const CartDrawer = () => {
       name: form.name.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
+      salesperson: form.salesperson.trim() || undefined,
       notes: form.notes.trim() || undefined,
       items: items.map((item) => ({
         productId: item.id,
@@ -114,7 +116,7 @@ const CartDrawer = () => {
 
     clearCart();
     setShowCheckout(false);
-    setForm({ name: "", email: "", phone: "", notes: "" });
+    setForm({ name: "", email: "", phone: "", salesperson: "", notes: "" });
     closeCart();
   };
 
@@ -229,6 +231,14 @@ const CartDrawer = () => {
                 className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50 outline-none"
                 required
                 maxLength={20}
+              />
+              <input
+                type="text"
+                placeholder="Salesperson (optional)"
+                value={form.salesperson}
+                onChange={(e) => setForm({ ...form, salesperson: e.target.value })}
+                className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50 outline-none"
+                maxLength={100}
               />
               <textarea
                 placeholder="Special instructions (optional)"

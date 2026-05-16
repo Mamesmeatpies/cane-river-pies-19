@@ -123,6 +123,7 @@ export default defineSchema({
     name: v.string(),
     email: v.string(),
     phone: v.string(),
+    salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     paymentMethod: v.union(v.literal("stripe"), v.literal("email")),
     status: v.union(v.literal("checkout_started"), v.literal("submitted")),

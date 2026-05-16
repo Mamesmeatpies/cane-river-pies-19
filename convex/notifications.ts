@@ -235,6 +235,7 @@ export const submitOrder = action({
     name: v.string(),
     email: v.string(),
     phone: v.string(),
+    salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     items: v.array(orderItemValidator),
     subtotal: v.optional(v.number()),
@@ -257,6 +258,7 @@ export const submitOrder = action({
           )} each)`
       )
       .join("\n");
+    const salespersonLine = args.salesperson?.trim() ? `Salesperson: ${args.salesperson.trim()}` : null;
 
     const notificationSent = await sendAdminEmail({
       subject: `New Mame's Meat Pie order from ${args.name}`,
@@ -265,6 +267,7 @@ export const submitOrder = action({
         `New order from ${args.name}`,
         `Email: ${args.email}`,
         `Phone: ${args.phone}`,
+        salespersonLine,
         "",
         "Items:",
         orderLines,
@@ -289,6 +292,7 @@ export const submitOrder = action({
         "",
         "Thank you for your order with Mame's Meat Pies.",
         "We will contact you regarding pick up or delivery.",
+        ...(salespersonLine ? ["", salespersonLine] : []),
         "",
         "Order summary:",
         orderLines,
@@ -333,6 +337,11 @@ export const submitOrder = action({
           <div style="margin-top:22px;padding:20px;border-radius:16px;background:#fff;border:1px solid #eadbc8">
             <p style="margin:0 0 12px;font-size:17px;font-family:Georgia,serif;color:#2a211c">Order summary</p>
             <p style="margin:0;font-size:15px;white-space:pre-line;color:#4b3a31">${textToHtml(orderLines)}</p>
+            ${
+              args.salesperson?.trim()
+                ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">Salesperson: ${escapeHtml(args.salesperson.trim())}</p>`
+                : ""
+            }
             ${
               args.promoCode
                 ? `<p style="margin:14px 0 0;font-size:15px;color:#4b3a31">

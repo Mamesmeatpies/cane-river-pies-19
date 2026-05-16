@@ -59,6 +59,7 @@ type Order = {
   phone: string;
   notes?: string;
   paymentMethod: "stripe" | "email";
+  salesperson?: string;
   status: "checkout_started" | "submitted";
   items: Array<{
     productId: string;
@@ -111,6 +112,7 @@ type InboxItem =
       items: Order["items"];
       subtotal?: number;
       promoCode?: string;
+      salesperson?: string;
       promoDiscount?: number;
       total: number;
     };
@@ -999,6 +1001,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           tags.add("Wholesale");
         }
 
+        salesperson: order.salesperson,
         if (/\b(event|wedding|festival|party|catering|corporate)\b/.test(combinedNotes)) {
           tags.add("Event Buyer");
         }
@@ -3867,3 +3870,6 @@ const Admin = () => {
 };
 
 export default Admin;
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Salesperson</p>
+                      <p className="mt-1 text-sm font-semibold">{activeItem.salesperson || "Not provided"}</p>
