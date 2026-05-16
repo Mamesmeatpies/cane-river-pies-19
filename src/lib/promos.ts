@@ -1,8 +1,15 @@
+import { MINI_PRODUCT_IDS } from "@/lib/productRules";
+
 export type PromoCode = {
   code: string;
   label: string;
   type: "percent" | "amount";
   value: number;
+  excludedProductIds?: string[];
+  startsAt?: string;
+  endsAt?: string;
+  maxRedemptions?: number;
+  channelHint?: string;
 };
 
 export type AppliedPromo = {
@@ -11,7 +18,19 @@ export type AppliedPromo = {
   discountAmount: number;
 };
 
+type PromoCartItem = {
+  id: string;
+  priceNum: number;
+  quantity: number;
+};
+
 export const PROMO_CODES: PromoCode[] = [
+  {
+    code: "COMP",
+    label: "Complimentary order",
+    type: "percent",
+    value: 100,
+  },
   {
     code: "MAMES10",
     label: "10% off",
@@ -24,13 +43,42 @@ export const PROMO_CODES: PromoCode[] = [
     type: "amount",
     value: 5,
   },
+  {
+    code: "KIM",
+    label: "$5 off",
+    type: "amount",
+    value: 5,
+    channelHint: "Direct outreach",
+  },
+  {
+    code: "WHOLESALE",
+    label: "$10 off except mini meat pies",
+    type: "amount",
+    value: 10,
+    excludedProductIds: [...MINI_PRODUCT_IDS],
+    channelHint: "Wholesale",
+  },
 ];
 
 export const normalizePromoCode = (code: string) => code.trim().toUpperCase().replace(/\s+/g, "");
 
 const roundCurrency = (value: number) => Math.round(value * 100) / 100;
 
-export const getAppliedPromo = (code: string, subtotal: number): AppliedPromo | null => {
+const getEligibleSubtotal = (subtotal: number, items: PromoCartItem[] | undefined, promo: PromoCode) => {
+  if (!promo.excludedProductIds || promo.excludedProductIds.length === 0 || !items) {
+    return subtotal;
+  }
+
+  return items.reduce((sum, item) => {
+    if (promo.excludedProductIds?.includes(item.id)) {
+      return sum;
+    }
+
+    return sum + item.priceNum * item.quantity;
+  }, 0);
+};
+
+export const getAppliedPromo = (code: string, subtotal: number, items?: PromoCartItem[]): AppliedPromo | null => {
   const normalizedCode = normalizePromoCode(code);
   const promo = PROMO_CODES.find((candidate) => candidate.code === normalizedCode);
 
@@ -38,12 +86,18 @@ export const getAppliedPromo = (code: string, subtotal: number): AppliedPromo | 
     return null;
   }
 
+  const eligibleSubtotal = getEligibleSubtotal(subtotal, items, promo);
+
+  if (eligibleSubtotal <= 0) {
+    return null;
+  }
+
   const discountAmount =
-    promo.type === "percent" ? roundCurrency(subtotal * (promo.value / 100)) : promo.value;
+    promo.type === "percent" ? roundCurrency(eligibleSubtotal * (promo.value / 100)) : promo.value;
 
   return {
     code: promo.code,
     label: promo.label,
-    discountAmount: Math.min(subtotal, discountAmount),
+    discountAmount: Math.min(eligibleSubtotal, discountAmount),
   };
 };

@@ -69,8 +69,8 @@ export default defineSchema({
     sourceCount: v.number(),
     socialDrafts: v.array(
       v.object({
-        sourceId: v.optional(v.id("marketingDrafts")),
         title: v.string(),
+        sourceId: v.optional(v.id("marketingDrafts")),
         sourceType: v.string(),
         channelLabel: v.string(),
         caption: v.string(),
@@ -91,8 +91,8 @@ export default defineSchema({
   }).index("by_generatedAt", ["generatedAt"]),
   marketingOutputs: defineTable({
     packId: v.optional(v.id("marketingGeneratedPacks")),
-    sourceDraftId: v.optional(v.id("marketingDrafts")),
     kind: v.union(v.literal("social"), v.literal("weekly-note")),
+    sourceDraftId: v.optional(v.id("marketingDrafts")),
     title: v.string(),
     channelLabel: v.string(),
     body: v.string(),
@@ -103,6 +103,18 @@ export default defineSchema({
     sourceType: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("approved"), v.literal("scheduled"), v.literal("posted")),
     publishAt: v.optional(v.string()),
+    publishedPlatforms: v.optional(v.array(v.union(v.literal("instagram"), v.literal("facebook")))),
+    publishHistory: v.optional(
+      v.array(
+        v.object({
+          platform: v.union(v.literal("instagram"), v.literal("facebook")),
+          externalId: v.string(),
+          publishedAt: v.number(),
+        })
+      )
+    ),
+    lastPublishError: v.optional(v.string()),
+    lastPublishAttemptAt: v.optional(v.number()),
     provider: v.string(),
     runLabel: v.string(),
     createdAt: v.number(),
@@ -131,11 +143,30 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"]),
   orders: defineTable({
     name: v.string(),
-    email: v.string(),
+    email: v.optional(v.string()),
     phone: v.string(),
+    preferredContactMethod: v.union(v.literal("email"), v.literal("phone")),
+    salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     paymentMethod: v.union(v.literal("stripe"), v.literal("email")),
     status: v.union(v.literal("checkout_started"), v.literal("submitted")),
+    fulfillmentStatus: v.optional(
+      v.union(
+        v.literal("new"),
+        v.literal("confirmed"),
+        v.literal("in_kitchen"),
+        v.literal("ready"),
+        v.literal("completed"),
+        v.literal("canceled")
+      )
+    ),
+    fulfillmentMethod: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery"), v.literal("event"), v.literal("unknown"))
+    ),
+    neededBy: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+    internalNotes: v.optional(v.string()),
+    lastFulfillmentUpdateAt: v.optional(v.number()),
     items: v.array(
       v.object({
         productId: v.string(),
@@ -148,9 +179,13 @@ export default defineSchema({
     subtotal: v.optional(v.number()),
     promoCode: v.optional(v.string()),
     promoDiscount: v.optional(v.number()),
+    promoSource: v.optional(v.string()),
+    promoCampaign: v.optional(v.string()),
     total: v.number(),
     createdAt: v.number(),
-  }).index("by_createdAt", ["createdAt"]),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_fulfillmentStatus", ["fulfillmentStatus"]),
   products: defineTable({
     productId: v.string(),
     name: v.string(),

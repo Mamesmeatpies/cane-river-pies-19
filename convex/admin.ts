@@ -110,6 +110,8 @@ export const getInboxForAdmin = action({
         };
       }
 
+      await ctx.runMutation(internal.products.seedDefaultsInternal, {});
+
       const limit = Math.min(Math.max(args.limit ?? 100, 1), 1000);
       await ctx.runMutation(internal.products.seedDefaultsInternal, {});
 

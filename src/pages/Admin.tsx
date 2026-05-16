@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
@@ -7,6 +7,7 @@ import {
   BarChart3,
   Boxes,
   CalendarDays,
+  Check,
   DollarSign,
   Download,
   Eye,
@@ -31,6 +32,8 @@ import {
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { marketingAssetOptions, marketingAssetPublicPathMap } from "../../shared/marketingAssets";
+import { PROMO_CODES } from "@/lib/promos";
 
 type ContactMessage = {
   _id: string;
@@ -55,11 +58,19 @@ type DirectMessage = {
 type Order = {
   _id: string;
   name: string;
-  email: string;
+  email?: string;
   phone: string;
+  preferredContactMethod: "email" | "phone";
+  salesperson?: string;
   notes?: string;
   paymentMethod: "stripe" | "email";
   status: "checkout_started" | "submitted";
+  fulfillmentStatus?: "new" | "confirmed" | "in_kitchen" | "ready" | "completed" | "canceled";
+  fulfillmentMethod?: "pickup" | "delivery" | "event" | "unknown";
+  neededBy?: string;
+  assignedTo?: string;
+  internalNotes?: string;
+  lastFulfillmentUpdateAt?: number;
   items: Array<{
     productId: string;
     name: string;
@@ -70,6 +81,8 @@ type Order = {
   subtotal?: number;
   promoCode?: string;
   promoDiscount?: number;
+  promoSource?: string;
+  promoCampaign?: string;
   total: number;
   createdAt: number;
 };
@@ -101,17 +114,27 @@ type InboxItem =
       id: string;
       type: "order";
       customerName: string;
-      email: string;
+      email?: string;
       phone: string;
+      preferredContactMethod: "email" | "phone";
+      salesperson?: string;
       preview: string;
       notes?: string;
       createdAt: number;
       paymentMethod: "stripe" | "email";
       status: "checkout_started" | "submitted";
+      fulfillmentStatus?: Order["fulfillmentStatus"];
+      fulfillmentMethod?: Order["fulfillmentMethod"];
+      neededBy?: string;
+      assignedTo?: string;
+      internalNotes?: string;
+      lastFulfillmentUpdateAt?: number;
       items: Order["items"];
       subtotal?: number;
       promoCode?: string;
       promoDiscount?: number;
+      promoSource?: string;
+      promoCampaign?: string;
       total: number;
     };
 
@@ -124,6 +147,7 @@ type MarketingApprovalStatus = "draft" | "ready" | "approved" | "scheduled";
 type AdminPage =
   | "dashboard"
   | "orders"
+  | "promos"
   | "products"
   | "inventory"
   | "customers"
@@ -161,6 +185,38 @@ type CustomerProfile = CustomerContact & {
   tags: string[];
 };
 
+type PromoUsageRow = Extract<InboxItem, { type: "order" }> & {
+  customerKey: string;
+  promoCode: string;
+  promoDiscount: number;
+  subtotal: number;
+  customerOrderCount: number;
+  customerType: "new" | "returning";
+};
+
+type PromoSummaryRow = {
+  code: string;
+  label: string;
+  channelHint?: string;
+  startsAt?: string;
+  endsAt?: string;
+  maxRedemptions?: number;
+  uses: number;
+  remainingRedemptions?: number;
+  uniqueCustomers: number;
+  totalDiscount: number;
+  totalRevenue: number;
+  averageOrderValue: number;
+  lastUsedAt?: number;
+  returningCustomerUses: number;
+  newCustomerUses: number;
+  completedOrders: number;
+  canceledOrders: number;
+  checkoutStarts: number;
+  sourceBreakdown: string[];
+  marginImpact: number;
+};
+
 type AdminProduct = {
   _id?: Id<"products">;
   productId: string;
@@ -178,6 +234,13 @@ type AdminProduct = {
   imageUploadName?: string;
 };
 
+type MarketingAssetUpload = {
+  storageId: Id<"_storage">;
+  fileName: string;
+  contentType?: string;
+  url?: string | null;
+};
+
 type MarketingDraft = {
   _id?: Id<"marketingDrafts">;
   title: string;
@@ -187,6 +250,7 @@ type MarketingDraft = {
   cta?: string;
   channels: string[];
   assetLinks?: string[];
+  assetUploads?: MarketingAssetUpload[];
   priority: MarketingPriority;
   publishBy?: string;
   approvalStatus: MarketingApprovalStatus;
@@ -213,6 +277,8 @@ type GeneratedWeeklyNote = {
 };
 
 type MarketingOutputStatus = "draft" | "approved" | "scheduled" | "posted";
+type FulfillmentStatus = NonNullable<Order["fulfillmentStatus"]>;
+type FulfillmentMethod = NonNullable<Order["fulfillmentMethod"]>;
 
 type MarketingGenerationResult = {
   access: "granted" | "denied" | "missing";
@@ -237,6 +303,7 @@ type MarketingOutput = {
   _id?: Id<"marketingOutputs">;
   packId?: Id<"marketingGeneratedPacks">;
   kind: "social" | "weekly-note";
+  sourceDraftId?: Id<"marketingDrafts">;
   title: string;
   channelLabel: string;
   body: string;
@@ -247,6 +314,14 @@ type MarketingOutput = {
   sourceType?: string;
   status: MarketingOutputStatus;
   publishAt?: string;
+  publishedPlatforms?: Array<"instagram" | "facebook">;
+  publishHistory?: Array<{
+    platform: "instagram" | "facebook";
+    externalId: string;
+    publishedAt: number;
+  }>;
+  lastPublishError?: string;
+  lastPublishAttemptAt?: number;
   provider: string;
   runLabel: string;
   createdAt: number;
@@ -269,6 +344,14 @@ type AdminInboxResult = {
   marketingGeneratedPacks: SavedMarketingPack[];
   marketingOutputs: MarketingOutput[];
   analytics: AnalyticsSummary | null;
+};
+
+type FulfillmentForm = {
+  fulfillmentStatus: FulfillmentStatus;
+  fulfillmentMethod: FulfillmentMethod;
+  neededBy: string;
+  assignedTo: string;
+  internalNotes: string;
 };
 
 type AnalyticsSummary = {
@@ -299,6 +382,7 @@ const ADMIN_KEY_STORAGE = "mames-admin-key";
 const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "orders", label: "Orders", icon: PackageCheck },
+  { id: "promos", label: "Promos", icon: Tag },
   { id: "products", label: "Products", icon: ShoppingBag },
   { id: "inventory", label: "Inventory", icon: Boxes },
   { id: "customers", label: "Customers", icon: Users },
@@ -309,7 +393,6 @@ const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDa
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-const topNavItems = adminNavItems.slice(0, 5);
 const emptyProductForm: AdminProduct = {
   productId: "",
   name: "",
@@ -337,22 +420,31 @@ const marketingTypeOptions: MarketingDraftType[] = [
 const marketingPriorityOptions: MarketingPriority[] = ["high", "medium", "low"];
 const marketingApprovalOptions: MarketingApprovalStatus[] = ["draft", "ready", "approved", "scheduled"];
 const marketingChannelOptions = ["Instagram", "Facebook", "LinkedIn", "X", "Email", "Website Notes"];
-const marketingAssetOptions = [
-  "src/assets/mini-pies-tray.png",
-  "src/assets/product-mini.jpg",
-  "src/assets/product-spicy.png",
-  "src/assets/product-beef-pork.jpg",
-  "src/assets/product-spicy.jpg",
-  "src/assets/product-turkey.png",
-  "src/assets/product-turkey.jpg",
-  "src/assets/hero-meat-pies.png",
-  "src/assets/hero-meatpies.jpg",
-  "src/assets/mame-kitchen-1.jpg",
-  "src/assets/mame-kitchen-2.jpg",
-  "src/assets/mame-portrait-2026.jpg",
-  "src/assets/mame-portrait-2026 2.jpg",
-];
+const marketingAssetPreviewMap: Record<string, string> = {
+  "src/assets/mini-pies-tray.png": new URL("../assets/mini-pies-tray.png", import.meta.url).href,
+  "src/assets/product-mini.jpg": new URL("../assets/product-mini.jpg", import.meta.url).href,
+  "src/assets/product-spicy.png": new URL("../assets/product-spicy.png", import.meta.url).href,
+  "src/assets/product-beef-pork.jpg": new URL("../assets/product-beef-pork.jpg", import.meta.url).href,
+  "src/assets/product-spicy.jpg": new URL("../assets/product-spicy.jpg", import.meta.url).href,
+  "src/assets/product-turkey.png": new URL("../assets/product-turkey.png", import.meta.url).href,
+  "src/assets/product-turkey.jpg": new URL("../assets/product-turkey.jpg", import.meta.url).href,
+  "src/assets/hero-meat-pies.png": new URL("../assets/hero-meat-pies.png", import.meta.url).href,
+  "src/assets/hero-meatpies.jpg": new URL("../assets/hero-meatpies.jpg", import.meta.url).href,
+  "src/assets/mame-kitchen-1.jpg": new URL("../assets/mame-kitchen-1.jpg", import.meta.url).href,
+  "src/assets/mame-kitchen-2.jpg": new URL("../assets/mame-kitchen-2.jpg", import.meta.url).href,
+  "src/assets/mame-portrait-2026.jpg": new URL("../assets/mame-portrait-2026.jpg", import.meta.url).href,
+  "src/assets/mame-portrait-2026 2.jpg": new URL("../assets/mame-portrait-2026 2.jpg", import.meta.url).href,
+};
 const marketingOutputStatusOptions: MarketingOutputStatus[] = ["draft", "approved", "scheduled", "posted"];
+const fulfillmentStatusOptions: FulfillmentStatus[] = ["new", "confirmed", "in_kitchen", "ready", "completed", "canceled"];
+const fulfillmentMethodOptions: FulfillmentMethod[] = ["pickup", "delivery", "event", "unknown"];
+const emptyFulfillmentForm: FulfillmentForm = {
+  fulfillmentStatus: "new",
+  fulfillmentMethod: "unknown",
+  neededBy: "",
+  assignedTo: "",
+  internalNotes: "",
+};
 const emptyMarketingDraftForm = {
   title: "",
   type: "weekly-update",
@@ -361,6 +453,7 @@ const emptyMarketingDraftForm = {
   cta: "",
   channels: ["Instagram", "Facebook", "Website Notes"],
   assetLinks: [],
+  assetUploads: [],
   priority: "medium",
   publishBy: "",
   approvalStatus: "draft",
@@ -398,6 +491,158 @@ const formatLabel = (value: string) =>
     .split(/[-\s]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+
+const formatShortDate = (value?: string) => {
+  if (!value) {
+    return "Open";
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed)
+    ? value
+    : new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+      }).format(parsed);
+};
+
+const getPromoScheduleStatus = ({
+  startsAt,
+  endsAt,
+  maxRedemptions,
+  uses,
+}: {
+  startsAt?: string;
+  endsAt?: string;
+  maxRedemptions?: number;
+  uses: number;
+}) => {
+  const now = Date.now();
+  const startsAtTime = startsAt ? Date.parse(startsAt) : Number.NEGATIVE_INFINITY;
+  const endsAtTime = endsAt ? Date.parse(endsAt) : Number.POSITIVE_INFINITY;
+
+  if (startsAt && !Number.isNaN(startsAtTime) && now < startsAtTime) {
+    return "scheduled";
+  }
+
+  if ((endsAt && !Number.isNaN(endsAtTime) && now > endsAtTime) || (maxRedemptions !== undefined && uses >= maxRedemptions)) {
+    return "closed";
+  }
+
+  return "active";
+};
+
+const getCustomerLookupKey = ({
+  customerName,
+  email,
+  phone,
+}: {
+  customerName: string;
+  email?: string;
+  phone?: string;
+}) => {
+  const emailKey = (email ?? "").trim().toLowerCase();
+  const phoneKey = (phone ?? "").replace(/\D/g, "");
+  return emailKey || phoneKey || customerName.trim().toLowerCase();
+};
+
+const getOrderFulfillmentStatus = (order: Pick<Order, "fulfillmentStatus"> | Pick<Extract<InboxItem, { type: "order" }>, "fulfillmentStatus">) =>
+  order.fulfillmentStatus ?? "new";
+
+const getOrderFulfillmentMethod = (order: Pick<Order, "fulfillmentMethod"> | Pick<Extract<InboxItem, { type: "order" }>, "fulfillmentMethod">) =>
+  order.fulfillmentMethod ?? "unknown";
+
+const getFulfillmentStatusTone = (status: FulfillmentStatus) => {
+  if (status === "completed") {
+    return "bg-green-100 text-green-800";
+  }
+
+  if (status === "ready") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+
+  if (status === "in_kitchen") {
+    return "bg-amber-100 text-amber-900";
+  }
+
+  if (status === "canceled") {
+    return "bg-slate-200 text-slate-700";
+  }
+
+  if (status === "confirmed") {
+    return "bg-blue-100 text-blue-800";
+  }
+
+  return "bg-red-100 text-red-800";
+};
+
+const getFulfillmentStatusDescription = (status: FulfillmentStatus) => {
+  if (status === "new") {
+    return "Needs confirmation and a plan.";
+  }
+
+  if (status === "confirmed") {
+    return "Confirmed with the customer and scheduled.";
+  }
+
+  if (status === "in_kitchen") {
+    return "Actively being prepared.";
+  }
+
+  if (status === "ready") {
+    return "Ready for pickup, delivery, or event handoff.";
+  }
+
+  if (status === "completed") {
+    return "Finished and delivered to the customer.";
+  }
+
+  return "Canceled or no longer moving forward.";
+};
+
+const formatAssetLabel = (value: string) => {
+  const segments = value.trim().split("/");
+  return segments[segments.length - 1] || value;
+};
+
+const getAssetHref = (value: string) =>
+  /^https?:\/\//i.test(value) ? value : marketingAssetPublicPathMap[value] ?? `/${value}`;
+const getAssetPreviewUrl = (value: string) => marketingAssetPreviewMap[value] ?? getAssetHref(value);
+
+const normalizeMarketingTitle = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const getDraftAssetItems = (draft?: Pick<MarketingDraft, "assetLinks" | "assetUploads"> | null) => {
+  if (!draft) {
+    return [];
+  }
+
+  const uploadedAssets = (draft.assetUploads ?? [])
+    .filter((asset) => asset.url)
+    .map((asset) => ({
+      key: asset.storageId,
+      href: asset.url ?? "",
+      label: asset.fileName,
+      kind: "uploaded" as const,
+    }));
+
+  const linkedAssets = (draft.assetLinks ?? []).map((asset) => ({
+    key: asset,
+    href: getAssetHref(asset),
+    label: formatAssetLabel(asset),
+    kind: "linked" as const,
+  }));
+
+  return [...uploadedAssets, ...linkedAssets];
+};
+
+const getUploadSelectionValue = (storageId: Id<"_storage">) => `upload:${storageId}`;
+
+type MarketingAssetChoice = {
+  value: string;
+  label: string;
+  href: string;
+  previewUrl: string;
+  source: "uploaded" | "library";
+};
 
 const getPriorityWeight = (priority: MarketingPriority) => {
   if (priority === "high") {
@@ -603,12 +848,15 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const createProduct = useMutation(api.products.createForAdmin);
   const seedDefaultProducts = useMutation(api.products.seedDefaultsForAdmin);
   const updateProduct = useMutation(api.products.updateForAdmin);
+  const updateOrderFulfillment = useMutation(api.orders.updateFulfillmentForAdmin);
   const createMarketingDraft = useMutation(api.marketingDrafts.createForAdmin);
+  const generateMarketingDraftUploadUrl = useMutation(api.marketingDrafts.generateUploadUrlForAdmin);
   const updateMarketingDraft = useMutation(api.marketingDrafts.updateForAdmin);
   const updateMarketingOutput = useMutation(api.marketingOutputs.updateForAdmin);
   const seedSampleMarketingQueue = useMutation(api.marketingGenerator.seedSampleQueueForAdmin);
   const importBellPhotoPromo = useMutation(api.marketingGenerator.importBellPhotoPromoForAdmin);
   const generateMarketingPack = useAction(api.marketingGenerator.generateForAdmin);
+  const requestMarketingApproval = useAction(api.marketingPublisher.requestApprovalForAdmin);
   const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -616,9 +864,14 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const [fallbackKey, setFallbackKey] = useState(getStoredAdminKey);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [promoSearch, setPromoSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activePage, setActivePage] = useState<AdminPage>("dashboard");
   const [salesRange, setSalesRange] = useState<SalesRange>("daily");
+  const [selectedFulfillmentOrderId, setSelectedFulfillmentOrderId] = useState<string | null>(null);
+  const [fulfillmentForm, setFulfillmentForm] = useState<FulfillmentForm>(emptyFulfillmentForm);
+  const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
+  const [fulfillmentNotice, setFulfillmentNotice] = useState<string | null>(null);
   const [selectedCustomerKey, setSelectedCustomerKey] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<AdminProduct>(emptyProductForm);
@@ -629,6 +882,10 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     useState<Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">>(emptyMarketingDraftForm);
   const [marketingDraftSaving, setMarketingDraftSaving] = useState(false);
   const [marketingDraftNotice, setMarketingDraftNotice] = useState<string | null>(null);
+  const [marketingAssetUploading, setMarketingAssetUploading] = useState(false);
+  const [marketingAssetDragActive, setMarketingAssetDragActive] = useState(false);
+  const [marketingReviewAssetUploading, setMarketingReviewAssetUploading] = useState(false);
+  const [marketingReviewAssetDragActive, setMarketingReviewAssetDragActive] = useState(false);
   const [selectedMarketingOutputId, setSelectedMarketingOutputId] = useState<string | null>(null);
   const [shouldAutoSelectLatestOutput, setShouldAutoSelectLatestOutput] = useState(false);
   const [marketingOutputForm, setMarketingOutputForm] =
@@ -636,9 +893,12 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
       emptyMarketingOutputForm
     );
   const [marketingOutputSaving, setMarketingOutputSaving] = useState(false);
+  const [marketingOutputPublishing, setMarketingOutputPublishing] = useState(false);
   const [marketingOutputNotice, setMarketingOutputNotice] = useState<string | null>(null);
   const [marketingGeneration, setMarketingGeneration] = useState<MarketingGenerationResult | null>(null);
   const [marketingGenerationLoading, setMarketingGenerationLoading] = useState(false);
+  const marketingAssetInputRef = useRef<HTMLInputElement | null>(null);
+  const marketingReviewAssetInputRef = useRef<HTMLInputElement | null>(null);
 
   const passwordContactResult = useQuery(
     api.contactMessages.listForAdmin,
@@ -652,11 +912,11 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const productResult = useQuery(api.products.listForAdmin, fallbackKey ? { adminKey: fallbackKey } : "skip");
   const marketingDraftResult = useQuery(
     api.marketingDrafts.listForAdmin,
-    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+    fallbackKey ? { adminKey: fallbackKey, limit: 250 } : "skip"
   );
   const marketingOutputResult = useQuery(
     api.marketingOutputs.listForAdmin,
-    fallbackKey ? { adminKey: fallbackKey, limit: 100 } : "skip"
+    fallbackKey ? { adminKey: fallbackKey, limit: 250 } : "skip"
   );
   const marketingPackResult = useQuery(
     api.marketingGenerator.listGeneratedPacksForAdmin,
@@ -686,6 +946,14 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const isUnlocked = access === "granted";
   const isUsingPassword = Boolean(fallbackKey);
   const showPasswordFallback = !isUsingPassword && (!isUnlocked || Boolean(inboxError));
+
+  useEffect(() => {
+    if (!fallbackKey || productResult?.access !== "granted") {
+      return;
+    }
+
+    void seedDefaultProducts({ adminKey: fallbackKey });
+  }, [fallbackKey, productResult?.access, seedDefaultProducts]);
 
   const loadInbox = useCallback(async () => {
     if (!user) {
@@ -738,6 +1006,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
         cta: selectedDraft.cta ?? "",
         channels: selectedDraft.channels,
         assetLinks: selectedDraft.assetLinks ?? [],
+        assetUploads: selectedDraft.assetUploads ?? [],
         priority: selectedDraft.priority,
         publishBy: selectedDraft.publishBy ?? "",
         approvalStatus: selectedDraft.approvalStatus,
@@ -835,15 +1104,25 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
         customerName: order.name,
         email: order.email,
         phone: order.phone,
+        preferredContactMethod: order.preferredContactMethod,
+        salesperson: order.salesperson,
         preview: order.notes || `${order.items.length} item${order.items.length === 1 ? "" : "s"}`,
         notes: order.notes,
         createdAt: order.createdAt,
         paymentMethod: order.paymentMethod,
         status: order.status,
+        fulfillmentStatus: order.fulfillmentStatus,
+        fulfillmentMethod: order.fulfillmentMethod,
+        neededBy: order.neededBy,
+        assignedTo: order.assignedTo,
+        internalNotes: order.internalNotes,
+        lastFulfillmentUpdateAt: order.lastFulfillmentUpdateAt,
         items: order.items,
         subtotal: order.subtotal,
         promoCode: order.promoCode,
         promoDiscount: order.promoDiscount,
+        promoSource: order.promoSource,
+        promoCampaign: order.promoCampaign,
         total: order.total,
       })) ?? [];
 
@@ -878,9 +1157,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     const contactsByKey = new Map<string, CustomerContact>();
 
     inboxItems.forEach((item) => {
-      const emailKey = (item.email ?? "").trim().toLowerCase();
-      const phoneKey = (item.phone ?? "").replace(/\D/g, "");
-      const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
+      const key = getCustomerLookupKey(item);
       const source = getInboxItemLabel(item.type);
       const existing = contactsByKey.get(key);
 
@@ -925,9 +1202,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     const profilesByKey = new Map<string, CustomerProfile>();
 
     inboxItems.forEach((item) => {
-      const emailKey = (item.email ?? "").trim().toLowerCase();
-      const phoneKey = (item.phone ?? "").replace(/\D/g, "");
-      const key = emailKey || phoneKey || item.customerName.trim().toLowerCase();
+      const key = getCustomerLookupKey(item);
       const source = getInboxItemLabel(item.type);
       const existing = profilesByKey.get(key);
       const profile =
@@ -1062,17 +1337,198 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const messageCount = contactMessageCount + directMessageCount;
   const orderCount = (isUsingPassword ? passwordOrderResult?.orders.length : adminResult?.orders.length) ?? 0;
   const contactCount = customerContacts.length;
-  const orderItems = inboxItems.filter((item) => item.type === "order");
+  const orderItems = inboxItems.filter((item): item is Extract<InboxItem, { type: "order" }> => item.type === "order");
+  const adminProductRows = useMemo(
+    () => ((isUsingPassword ? productResult?.products : adminResult?.products) ?? []) as AdminProduct[],
+    [adminResult?.products, isUsingPassword, productResult?.products]
+  );
+  const promoUsageRows = useMemo<PromoUsageRow[]>(() => {
+    const orderCountsByCustomer = new Map<string, number>();
+
+    for (const order of orderItems) {
+      const customerKey = getCustomerLookupKey(order);
+      orderCountsByCustomer.set(customerKey, (orderCountsByCustomer.get(customerKey) ?? 0) + 1);
+    }
+
+    return orderItems
+      .filter((order): order is Extract<InboxItem, { type: "order" }> & { promoCode: string; promoDiscount: number } =>
+        Boolean(order.promoCode) && (order.promoDiscount ?? 0) > 0
+      )
+      .map((order) => {
+        const customerKey = getCustomerLookupKey(order);
+        const customerOrderCount = orderCountsByCustomer.get(customerKey) ?? 1;
+        return {
+          ...order,
+          customerKey,
+          promoCode: order.promoCode,
+          promoDiscount: order.promoDiscount,
+          subtotal: order.subtotal ?? order.total + order.promoDiscount,
+          customerOrderCount,
+          customerType: customerOrderCount > 1 ? "returning" : "new",
+        };
+      });
+  }, [orderItems]);
+  const promoSummaryRows = useMemo<PromoSummaryRow[]>(() => {
+    const configuredPromos = new Map(PROMO_CODES.map((promo) => [promo.code, promo]));
+    const productCostsById = new Map(adminProductRows.map((product) => [product.productId, product.cost ?? 0]));
+    const summaryByCode = new Map<string, PromoSummaryRow>();
+
+    for (const promo of PROMO_CODES) {
+      summaryByCode.set(promo.code, {
+        code: promo.code,
+        label: promo.label,
+        channelHint: promo.channelHint,
+        startsAt: promo.startsAt,
+        endsAt: promo.endsAt,
+        maxRedemptions: promo.maxRedemptions,
+        uses: 0,
+        remainingRedemptions: promo.maxRedemptions,
+        uniqueCustomers: 0,
+        totalDiscount: 0,
+        totalRevenue: 0,
+        averageOrderValue: 0,
+        returningCustomerUses: 0,
+        newCustomerUses: 0,
+        completedOrders: 0,
+        canceledOrders: 0,
+        checkoutStarts: 0,
+        sourceBreakdown: [],
+        marginImpact: 0,
+      });
+    }
+
+    const uniqueCustomersByCode = new Map<string, Set<string>>();
+    const sourceBreakdownByCode = new Map<string, Map<string, number>>();
+
+    for (const usage of promoUsageRows) {
+      const configuredPromo = configuredPromos.get(usage.promoCode);
+      const existing = summaryByCode.get(usage.promoCode) ?? {
+        code: usage.promoCode,
+        label: configuredPromo?.label ?? usage.promoCode,
+        channelHint: configuredPromo?.channelHint,
+        startsAt: configuredPromo?.startsAt,
+        endsAt: configuredPromo?.endsAt,
+        maxRedemptions: configuredPromo?.maxRedemptions,
+        uses: 0,
+        remainingRedemptions: configuredPromo?.maxRedemptions,
+        uniqueCustomers: 0,
+        totalDiscount: 0,
+        totalRevenue: 0,
+        averageOrderValue: 0,
+        returningCustomerUses: 0,
+        newCustomerUses: 0,
+        completedOrders: 0,
+        canceledOrders: 0,
+        checkoutStarts: 0,
+        sourceBreakdown: [],
+        marginImpact: 0,
+      };
+
+      existing.uses += 1;
+      existing.totalDiscount += usage.promoDiscount;
+      existing.totalRevenue += usage.total;
+      existing.lastUsedAt = Math.max(existing.lastUsedAt ?? 0, usage.createdAt);
+      existing.returningCustomerUses += usage.customerType === "returning" ? 1 : 0;
+      existing.newCustomerUses += usage.customerType === "new" ? 1 : 0;
+      existing.completedOrders += getOrderFulfillmentStatus(usage) === "completed" ? 1 : 0;
+      existing.canceledOrders += getOrderFulfillmentStatus(usage) === "canceled" ? 1 : 0;
+      existing.checkoutStarts += usage.status === "checkout_started" ? 1 : 0;
+
+      const estimatedCost = usage.items.reduce(
+        (sum, item) => sum + (productCostsById.get(item.productId) ?? 0) * item.quantity,
+        0
+      );
+      existing.marginImpact += usage.total - estimatedCost;
+      summaryByCode.set(usage.promoCode, existing);
+
+      const uniqueCustomers = uniqueCustomersByCode.get(usage.promoCode) ?? new Set<string>();
+      uniqueCustomers.add(usage.customerKey);
+      uniqueCustomersByCode.set(usage.promoCode, uniqueCustomers);
+
+      const sourceLabel = usage.promoSource?.trim() || usage.promoCampaign?.trim() || "direct";
+      const sourceBreakdown = sourceBreakdownByCode.get(usage.promoCode) ?? new Map<string, number>();
+      sourceBreakdown.set(sourceLabel, (sourceBreakdown.get(sourceLabel) ?? 0) + 1);
+      sourceBreakdownByCode.set(usage.promoCode, sourceBreakdown);
+    }
+
+    return Array.from(summaryByCode.values())
+      .map((summary) => ({
+        ...summary,
+        uniqueCustomers: uniqueCustomersByCode.get(summary.code)?.size ?? 0,
+        averageOrderValue: summary.uses > 0 ? summary.totalRevenue / summary.uses : 0,
+        remainingRedemptions:
+          summary.maxRedemptions === undefined ? undefined : Math.max(summary.maxRedemptions - summary.uses, 0),
+        sourceBreakdown: Array.from(sourceBreakdownByCode.get(summary.code)?.entries() ?? [])
+          .sort((a, b) => b[1] - a[1])
+          .map(([source, count]) => `${source} (${count})`),
+      }))
+      .sort((a, b) => {
+        if (b.uses !== a.uses) {
+          return b.uses - a.uses;
+        }
+
+        return a.code.localeCompare(b.code);
+      });
+  }, [adminProductRows, promoUsageRows]);
+  const visiblePromoUsageRows = useMemo(() => {
+    const normalizedSearch = promoSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return promoUsageRows;
+    }
+
+    return promoUsageRows.filter((usage) =>
+      [
+        usage.customerName,
+        usage.email,
+        usage.phone,
+        usage.promoCode,
+        usage.promoSource,
+        usage.promoCampaign,
+        usage.paymentMethod,
+        usage.salesperson,
+        usage.items.map((item) => item.name).join(" "),
+      ]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(normalizedSearch))
+    );
+  }, [promoSearch, promoUsageRows]);
+  const visiblePromoSummaryRows = useMemo(() => {
+    const normalizedSearch = promoSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return promoSummaryRows;
+    }
+
+    return promoSummaryRows.filter((summary) =>
+      [summary.code, summary.label, summary.channelHint].filter(Boolean).some((value) => value!.toLowerCase().includes(normalizedSearch))
+    );
+  }, [promoSearch, promoSummaryRows]);
+  const promoDiscountTotal = promoUsageRows.reduce((sum, usage) => sum + usage.promoDiscount, 0);
+  const promoRevenueTotal = promoUsageRows.reduce((sum, usage) => sum + usage.total, 0);
+  const promoReturningUseCount = promoUsageRows.filter((usage) => usage.customerType === "returning").length;
+  const fulfillmentOrders = useMemo(
+    () =>
+      [...orderItems].sort((a, b) => {
+        const aNeededBy = a.neededBy ? Date.parse(a.neededBy) : Number.POSITIVE_INFINITY;
+        const bNeededBy = b.neededBy ? Date.parse(b.neededBy) : Number.POSITIVE_INFINITY;
+
+        if (aNeededBy !== bNeededBy) {
+          return aNeededBy - bNeededBy;
+        }
+
+        return b.createdAt - a.createdAt;
+      }),
+    [orderItems]
+  );
+  const selectedFulfillmentOrder =
+    fulfillmentOrders.find((order) => order.id === selectedFulfillmentOrderId) ?? fulfillmentOrders[0] ?? null;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayOrderItems = orderItems.filter((item) => item.createdAt >= todayStart.getTime());
   const todayRevenue = todayOrderItems.reduce((sum, item) => sum + item.total, 0);
   const conversionRate = inboxItems.length > 0 ? Math.round((orderCount / inboxItems.length) * 100) : 0;
   const recentOrders = orderItems.slice(0, 5);
-  const adminProductRows = useMemo(
-    () => ((isUsingPassword ? productResult?.products : adminResult?.products) ?? []) as AdminProduct[],
-    [adminResult?.products, isUsingPassword, productResult?.products]
-  );
   const lowStockProducts = adminProductRows.filter(
     (product) => product.status === "low_stock" || product.stock <= (product.inventoryThreshold ?? 10)
   );
@@ -1130,7 +1586,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           shortPost: buildShortPost(draft),
           hashtags: buildHashtags(draft),
           assetHint:
-            draft.assetLinks && draft.assetLinks.length > 0
+            (draft.assetLinks && draft.assetLinks.length > 0) || (draft.assetUploads && draft.assetUploads.length > 0)
               ? "Use the linked asset first, then pull from the full photo library to round out the promotion."
               : "Use all available photos in the library and match the strongest product, tray, hero, or Mame image to the post.",
         })),
@@ -1150,6 +1606,63 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const displayedWeeklyNote = marketingGeneration?.weeklyNote ?? generatedWeeklyNote;
   const generationProviderLabel = marketingGeneration?.provider ?? "preview";
   const selectedMarketingOutput = marketingOutputs.find((output) => output._id === selectedMarketingOutputId) ?? null;
+  const selectedMarketingOutputSourceDraft = useMemo(() => {
+    if (!selectedMarketingOutput) {
+      return null;
+    }
+
+    if (selectedMarketingOutput.sourceDraftId) {
+      return marketingDraftRows.find((draft) => draft._id === selectedMarketingOutput.sourceDraftId) ?? null;
+    }
+
+    const outputTitle = normalizeMarketingTitle(selectedMarketingOutput.title);
+    const titleMatch =
+      marketingDraftRows.find((draft) => normalizeMarketingTitle(draft.title) === outputTitle) ??
+      marketingDraftRows.find((draft) => normalizeMarketingTitle(`Weekly Notes: ${draft.title}`) === outputTitle);
+
+    if (titleMatch) {
+      return titleMatch;
+    }
+
+    return (
+      marketingDraftRows.find(
+        (draft) =>
+          draft.type === selectedMarketingOutput.sourceType &&
+          (draft.title === selectedMarketingOutput.title || `Weekly Notes: ${draft.title}` === selectedMarketingOutput.title)
+      ) ?? null
+    );
+  }, [marketingDraftRows, selectedMarketingOutput]);
+  const selectedMarketingOutputLinkedAssets = getDraftAssetItems(selectedMarketingOutputSourceDraft);
+  const selectedMarketingAssetChoices = useMemo<MarketingAssetChoice[]>(() => {
+    const uploadedChoices =
+      selectedMarketingOutputSourceDraft?.assetUploads
+        ?.filter((asset) => asset.url)
+        .map((asset) => ({
+          value: getUploadSelectionValue(asset.storageId),
+          label: asset.fileName,
+          href: asset.url ?? "",
+          previewUrl: asset.url ?? "",
+          source: "uploaded" as const,
+        })) ?? [];
+
+    const libraryChoices = marketingAssetOptions.map((asset) => ({
+      value: asset,
+      label: formatAssetLabel(asset),
+      href: getAssetHref(asset),
+      previewUrl: getAssetPreviewUrl(asset),
+      source: "library" as const,
+    }));
+
+    return [...uploadedChoices, ...libraryChoices];
+  }, [selectedMarketingOutputSourceDraft]);
+  const selectedMarketingAssetChoiceMap = useMemo(
+    () => new Map(selectedMarketingAssetChoices.map((asset) => [asset.value, asset])),
+    [selectedMarketingAssetChoices]
+  );
+  const unresolvedSelectedMarketingAssets = useMemo(
+    () => marketingOutputForm.selectedAssets.filter((asset) => !selectedMarketingAssetChoiceMap.has(asset)),
+    [marketingOutputForm.selectedAssets, selectedMarketingAssetChoiceMap]
+  );
   const dashboardAlerts = [
     {
       title: "Low inventory: Meat Pies",
@@ -1159,8 +1672,11 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           : "Inventory counts are healthy.",
     },
     {
-      title: "Failed payment alert",
-      detail: "Stripe checkout monitoring is ready for the next integration step.",
+      title: "Fulfillment queue",
+      detail:
+        fulfillmentDueSoon > 0
+          ? `${fulfillmentDueSoon} order${fulfillmentDueSoon === 1 ? "" : "s"} need attention in the next 48 hours.`
+          : "No urgent fulfillment deadlines right now.",
     },
   ];
   const inactiveSince = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -1244,6 +1760,21 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const analyticsSummary = (isUsingPassword ? passwordAnalyticsResult?.summary : adminResult?.analytics) ?? null;
   const maxAnalyticsTrend = Math.max(...(analyticsSummary?.sevenDayTrend.map((bucket) => bucket.visits) ?? [0]), 1);
 
+  useEffect(() => {
+    if (!selectedFulfillmentOrder) {
+      setFulfillmentForm(emptyFulfillmentForm);
+      return;
+    }
+
+    setFulfillmentForm({
+      fulfillmentStatus: getOrderFulfillmentStatus(selectedFulfillmentOrder),
+      fulfillmentMethod: getOrderFulfillmentMethod(selectedFulfillmentOrder),
+      neededBy: selectedFulfillmentOrder.neededBy ?? "",
+      assignedTo: selectedFulfillmentOrder.assignedTo ?? "",
+      internalNotes: selectedFulfillmentOrder.internalNotes ?? "",
+    });
+  }, [selectedFulfillmentOrder]);
+
   const handleDownloadContacts = (contacts: CustomerContact[]) => {
     downloadCsv(
       `mames-customer-contacts-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -1260,11 +1791,107 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     );
   };
 
+  const handleDownloadPromoSummary = (summaryRows: PromoSummaryRow[]) => {
+    downloadCsv(
+      `mames-promo-summary-${new Date().toISOString().slice(0, 10)}.csv`,
+      summaryRows.map((summary) => ({
+        Code: summary.code,
+        Label: summary.label,
+        Channel: summary.channelHint ?? "Not set",
+        "Start Date": summary.startsAt ?? "Open",
+        "End Date": summary.endsAt ?? "Open",
+        "Max Redemptions": summary.maxRedemptions ?? "Unlimited",
+        "Remaining Redemptions": summary.remainingRedemptions ?? "Unlimited",
+        Uses: summary.uses,
+        "Unique Customers": summary.uniqueCustomers,
+        "Returning Customer Uses": summary.returningCustomerUses,
+        "New Customer Uses": summary.newCustomerUses,
+        "Completed Orders": summary.completedOrders,
+        "Canceled Orders": summary.canceledOrders,
+        "Checkout Starts": summary.checkoutStarts,
+        "Total Discount": summary.totalDiscount.toFixed(2),
+        "Total Revenue": summary.totalRevenue.toFixed(2),
+        "Average Order Value": summary.averageOrderValue.toFixed(2),
+        "Estimated Margin Impact": summary.marginImpact.toFixed(2),
+        Sources: summary.sourceBreakdown.join(" | ") || "None yet",
+        "Last Used": summary.lastUsedAt ? formatDate(summary.lastUsedAt) : "Never used",
+      }))
+    );
+  };
+
+  const handleDownloadPromoUsage = (usageRows: PromoUsageRow[]) => {
+    downloadCsv(
+      `mames-promo-usage-${new Date().toISOString().slice(0, 10)}.csv`,
+      usageRows.map((usage) => ({
+        Code: usage.promoCode,
+        Customer: usage.customerName,
+        Email: usage.email ?? "Not provided",
+        Phone: usage.phone,
+        "Date / Time": formatDate(usage.createdAt),
+        Source: usage.promoSource ?? "Not provided",
+        Campaign: usage.promoCampaign ?? "Not provided",
+        Discount: usage.promoDiscount.toFixed(2),
+        Subtotal: usage.subtotal.toFixed(2),
+        Total: usage.total.toFixed(2),
+        Payment: usage.paymentMethod === "stripe" ? "Stripe" : "Email",
+        Status: usage.status === "submitted" ? "Submitted" : "Checkout started",
+        "Customer Type": usage.customerType,
+        "Order Count": usage.customerOrderCount,
+        Salesperson: usage.salesperson ?? "",
+        Items: usage.items.map((item) => `${item.name} x${item.quantity}`).join(" | "),
+      }))
+    );
+  };
+
   const updateProductForm = (field: keyof AdminProduct, value: string | number | string[]) => {
     setProductForm((current) => ({
       ...current,
       [field]: value,
     }));
+  };
+
+  const updateFulfillmentForm = (field: keyof FulfillmentForm, value: string) => {
+    setFulfillmentForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleFulfillmentSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFulfillmentNotice(null);
+
+    if (!fallbackKey) {
+      setFulfillmentNotice("Unlock with the admin password before updating fulfillment.");
+      return;
+    }
+
+    if (!selectedFulfillmentOrder?.id) {
+      setFulfillmentNotice("Select an order to update.");
+      return;
+    }
+
+    setFulfillmentSaving(true);
+
+    try {
+      const result = await updateOrderFulfillment({
+        adminKey: fallbackKey,
+        id: selectedFulfillmentOrder.id as Id<"orders">,
+        fulfillmentStatus: fulfillmentForm.fulfillmentStatus,
+        fulfillmentMethod: fulfillmentForm.fulfillmentMethod,
+        neededBy: fulfillmentForm.neededBy.trim() || undefined,
+        assignedTo: fulfillmentForm.assignedTo.trim() || undefined,
+        internalNotes: fulfillmentForm.internalNotes.trim() || undefined,
+      });
+
+      setFulfillmentNotice(
+        result.access === "granted" ? "Fulfillment plan updated." : "That admin password did not match."
+      );
+    } catch (error) {
+      setFulfillmentNotice(error instanceof Error ? error.message : "Fulfillment details could not be saved.");
+    } finally {
+      setFulfillmentSaving(false);
+    }
   };
 
   const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1327,12 +1954,206 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
 
   const updateMarketingDraftForm = (
     field: keyof Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">,
-    value: string | string[]
+    value: string | string[] | MarketingAssetUpload[]
   ) => {
     setMarketingDraftForm((current) => ({
       ...current,
       [field]: value,
     }));
+  };
+
+  const buildMarketingDraftPayload = useCallback(
+    (draft: Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">) => ({
+      title: draft.title.trim(),
+      type: draft.type,
+      summary: draft.summary.trim(),
+      facts: draft.facts.trim(),
+      cta: draft.cta?.trim() || undefined,
+      channels: draft.channels,
+      assetLinks: draft.assetLinks?.map((link) => link.trim()).filter(Boolean) ?? [],
+      assetUploads:
+        draft.assetUploads?.map((asset) => ({
+          storageId: asset.storageId,
+          fileName: asset.fileName,
+          contentType: asset.contentType,
+        })) ?? [],
+      priority: draft.priority,
+      publishBy: draft.publishBy?.trim() || undefined,
+      approvalStatus: draft.approvalStatus,
+      notes: draft.notes?.trim() || undefined,
+    }),
+    []
+  );
+
+  const uploadFilesToMarketingStorage = useCallback(
+    async (files: FileList | File[]) => {
+      if (!fallbackKey) {
+        throw new Error("Unlock with the admin password before uploading photos.");
+      }
+
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+
+      if (imageFiles.length === 0) {
+        throw new Error("Choose image files such as JPG, PNG, or WebP.");
+      }
+
+      const uploadedAssets: MarketingAssetUpload[] = [];
+
+      for (const file of imageFiles) {
+        const uploadTarget = await generateMarketingDraftUploadUrl({ adminKey: fallbackKey });
+
+        if (uploadTarget.access !== "granted" || !uploadTarget.uploadUrl) {
+          throw new Error("That admin password did not match.");
+        }
+
+        const uploadResponse = await fetch(uploadTarget.uploadUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed for ${file.name}.`);
+        }
+
+        const { storageId } = (await uploadResponse.json()) as { storageId?: Id<"_storage"> };
+
+        if (!storageId) {
+          throw new Error(`Upload could not be completed for ${file.name}.`);
+        }
+
+        uploadedAssets.push({
+          storageId,
+          fileName: file.name,
+          contentType: file.type || undefined,
+          url: URL.createObjectURL(file),
+        });
+      }
+
+      return uploadedAssets;
+    },
+    [fallbackKey, generateMarketingDraftUploadUrl]
+  );
+
+  const uploadMarketingAssets = useCallback(
+    async (files: FileList | File[]) => {
+      setMarketingAssetUploading(true);
+      setMarketingDraftNotice(null);
+
+      try {
+        const uploadedAssets = await uploadFilesToMarketingStorage(files);
+
+        setMarketingDraftForm((current) => ({
+          ...current,
+          assetUploads: [...(current.assetUploads ?? []), ...uploadedAssets],
+        }));
+        setMarketingDraftNotice(
+          `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? "" : "s"} added to this content item.`
+        );
+      } catch (error) {
+        setMarketingDraftNotice(error instanceof Error ? error.message : "Photos could not be uploaded.");
+      } finally {
+        setMarketingAssetUploading(false);
+      }
+    },
+    [uploadFilesToMarketingStorage]
+  );
+
+  const handleMarketingAssetInput = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files?.length) {
+      await uploadMarketingAssets(event.target.files);
+    }
+
+    event.target.value = "";
+  };
+
+  const handleMarketingAssetDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setMarketingAssetDragActive(false);
+
+    if (event.dataTransfer.files?.length) {
+      await uploadMarketingAssets(event.dataTransfer.files);
+    }
+  };
+
+  const removeMarketingUploadedAsset = (storageId: Id<"_storage">) => {
+    setMarketingDraftForm((current) => ({
+      ...current,
+      assetUploads: (current.assetUploads ?? []).filter((asset) => asset.storageId !== storageId),
+    }));
+  };
+
+  const uploadMarketingReviewAssets = useCallback(
+    async (files: FileList | File[]) => {
+      if (!fallbackKey) {
+        setMarketingOutputNotice("Unlock with the admin password before uploading photos.");
+        return;
+      }
+
+      if (!selectedMarketingOutputSourceDraft?._id) {
+        setMarketingOutputNotice("This draft is not linked to a source content item yet.");
+        return;
+      }
+
+      setMarketingReviewAssetUploading(true);
+      setMarketingOutputNotice(null);
+
+      try {
+        const uploadedAssets = await uploadFilesToMarketingStorage(files);
+        const nextDraft = {
+          title: selectedMarketingOutputSourceDraft.title,
+          type: selectedMarketingOutputSourceDraft.type,
+          summary: selectedMarketingOutputSourceDraft.summary,
+          facts: selectedMarketingOutputSourceDraft.facts,
+          cta: selectedMarketingOutputSourceDraft.cta ?? "",
+          channels: selectedMarketingOutputSourceDraft.channels,
+          assetLinks: selectedMarketingOutputSourceDraft.assetLinks ?? [],
+          assetUploads: [...(selectedMarketingOutputSourceDraft.assetUploads ?? []), ...uploadedAssets],
+          priority: selectedMarketingOutputSourceDraft.priority,
+          publishBy: selectedMarketingOutputSourceDraft.publishBy ?? "",
+          approvalStatus: selectedMarketingOutputSourceDraft.approvalStatus,
+          notes: selectedMarketingOutputSourceDraft.notes ?? "",
+        } satisfies Omit<MarketingDraft, "_id" | "createdAt" | "updatedAt">;
+
+        const result = await updateMarketingDraft({
+          adminKey: fallbackKey,
+          id: selectedMarketingOutputSourceDraft._id,
+          draft: buildMarketingDraftPayload(nextDraft),
+        });
+
+        if (result.access !== "granted") {
+          throw new Error("That admin password did not match.");
+        }
+
+        setMarketingOutputNotice(
+          `${uploadedAssets.length} photo${uploadedAssets.length === 1 ? "" : "s"} added to this draft review.`
+        );
+      } catch (error) {
+        setMarketingOutputNotice(error instanceof Error ? error.message : "Photos could not be uploaded.");
+      } finally {
+        setMarketingReviewAssetUploading(false);
+      }
+    },
+    [buildMarketingDraftPayload, fallbackKey, selectedMarketingOutputSourceDraft, updateMarketingDraft, uploadFilesToMarketingStorage]
+  );
+
+  const handleMarketingReviewAssetInput = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files?.length) {
+      await uploadMarketingReviewAssets(event.target.files);
+    }
+
+    event.target.value = "";
+  };
+
+  const handleMarketingReviewAssetDrop = async (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setMarketingReviewAssetDragActive(false);
+
+    if (event.dataTransfer.files?.length) {
+      await uploadMarketingReviewAssets(event.dataTransfer.files);
+    }
   };
 
   const handleMarketingDraftSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1344,19 +2165,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
       return;
     }
 
-    const draftPayload = {
-      title: marketingDraftForm.title.trim(),
-      type: marketingDraftForm.type,
-      summary: marketingDraftForm.summary.trim(),
-      facts: marketingDraftForm.facts.trim(),
-      cta: marketingDraftForm.cta.trim() || undefined,
-      channels: marketingDraftForm.channels,
-      assetLinks: marketingDraftForm.assetLinks?.map((link) => link.trim()).filter(Boolean) ?? [],
-      priority: marketingDraftForm.priority,
-      publishBy: marketingDraftForm.publishBy.trim() || undefined,
-      approvalStatus: marketingDraftForm.approvalStatus,
-      notes: marketingDraftForm.notes?.trim() || undefined,
-    };
+    const draftPayload = buildMarketingDraftPayload(marketingDraftForm);
 
     if (!draftPayload.title || !draftPayload.summary || !draftPayload.facts || draftPayload.channels.length === 0) {
       setMarketingDraftNotice("Title, summary, facts, and at least one channel are required.");
@@ -1471,18 +2280,37 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     }));
   };
 
-  const handleMarketingOutputSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const toggleMarketingOutputSelectedAsset = (assetValue: string) => {
+    setMarketingOutputForm((current) => {
+      const nextAssets = current.selectedAssets.includes(assetValue)
+        ? current.selectedAssets.filter((value) => value !== assetValue)
+        : [...current.selectedAssets, assetValue];
+
+      return {
+        ...current,
+        selectedAssets: nextAssets,
+      };
+    });
+  };
+
+  const saveMarketingOutput = async (statusOverride?: MarketingOutputStatus) => {
     setMarketingOutputNotice(null);
 
     if (!fallbackKey) {
       setMarketingOutputNotice("Unlock with the admin password before updating generated drafts.");
-      return;
+      return false;
     }
 
     if (!selectedMarketingOutput?._id) {
       setMarketingOutputNotice("Select a generated draft first.");
-      return;
+      return false;
+    }
+
+    const nextStatus = statusOverride ?? marketingOutputForm.status;
+
+    if ((nextStatus === "approved" || nextStatus === "scheduled" || nextStatus === "posted") && marketingOutputForm.selectedAssets.length === 0) {
+      setMarketingOutputNotice("Choose at least one photo before marking this draft approved.");
+      return false;
     }
 
     setMarketingOutputSaving(true);
@@ -1499,16 +2327,104 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           hashtags: marketingOutputForm.hashtags.map((tag) => tag.trim()).filter(Boolean),
           assetHint: marketingOutputForm.assetHint.trim(),
           selectedAssets: marketingOutputForm.selectedAssets,
-          status: marketingOutputForm.status,
+          status: nextStatus,
           publishAt: marketingOutputForm.publishAt.trim() || undefined,
         },
       });
-      setMarketingOutputNotice(result.access === "granted" ? "Generated draft updated." : "That admin password did not match.");
+      if (result.access === "granted") {
+        if (selectedMarketingOutputSourceDraft?._id && (nextStatus === "approved" || nextStatus === "scheduled")) {
+          const sourceApprovalStatus =
+            nextStatus === "scheduled" ? "scheduled" : "approved";
+
+          if (selectedMarketingOutputSourceDraft.approvalStatus !== sourceApprovalStatus) {
+            await updateMarketingDraft({
+              adminKey: fallbackKey,
+              id: selectedMarketingOutputSourceDraft._id,
+              draft: buildMarketingDraftPayload({
+                title: selectedMarketingOutputSourceDraft.title,
+                type: selectedMarketingOutputSourceDraft.type,
+                summary: selectedMarketingOutputSourceDraft.summary,
+                facts: selectedMarketingOutputSourceDraft.facts,
+                cta: selectedMarketingOutputSourceDraft.cta ?? "",
+                channels: selectedMarketingOutputSourceDraft.channels,
+                assetLinks: selectedMarketingOutputSourceDraft.assetLinks ?? [],
+                assetUploads: selectedMarketingOutputSourceDraft.assetUploads ?? [],
+                priority: selectedMarketingOutputSourceDraft.priority,
+                publishBy: selectedMarketingOutputSourceDraft.publishBy ?? "",
+                approvalStatus: sourceApprovalStatus,
+                notes: selectedMarketingOutputSourceDraft.notes ?? "",
+              }),
+            });
+          }
+        }
+
+        if (statusOverride) {
+          setMarketingOutputForm((current) => ({
+            ...current,
+            status: nextStatus,
+          }));
+          setMarketingOutputNotice(
+            nextStatus === "approved"
+              ? "Draft approved and source content moved to Approved."
+              : `Draft marked ${formatLabel(nextStatus)}.`
+          );
+        } else {
+          setMarketingOutputNotice("Generated draft updated.");
+        }
+
+        return true;
+      } else {
+        setMarketingOutputNotice("That admin password did not match.");
+        return false;
+      }
     } catch (error) {
       setMarketingOutputNotice(error instanceof Error ? error.message : "Generated draft could not be updated.");
+      return false;
     } finally {
       setMarketingOutputSaving(false);
     }
+  };
+
+  const handleAutoPostApprovedDraft = async () => {
+    if (!fallbackKey) {
+      setMarketingOutputNotice("Unlock with the admin password before auto-posting.");
+      return;
+    }
+
+    if (!selectedMarketingOutput?._id) {
+      setMarketingOutputNotice("Select a generated draft first.");
+      return;
+    }
+
+    const saved = await saveMarketingOutput("approved");
+
+    if (!saved) {
+      return;
+    }
+
+    setMarketingOutputPublishing(true);
+
+    try {
+      const result = await requestMarketingApproval({
+        adminKey: fallbackKey,
+        id: selectedMarketingOutput._id,
+      });
+
+      if (result.access !== "granted") {
+        setMarketingOutputNotice("That admin password did not match.");
+        return;
+      }
+      setMarketingOutputNotice(result.message);
+    } catch (error) {
+      setMarketingOutputNotice(error instanceof Error ? error.message : "Auto-posting could not be completed.");
+    } finally {
+      setMarketingOutputPublishing(false);
+    }
+  };
+
+  const handleMarketingOutputSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await saveMarketingOutput();
   };
 
   const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -2056,6 +2972,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               <tr>
                 <th className="px-5 py-3">Name</th>
                 <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Phone</th>
                 <th className="px-5 py-3">Orders</th>
                 <th className="px-5 py-3">Lifetime Value</th>
                 <th className="px-5 py-3">Last Order</th>
@@ -2064,19 +2981,19 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
                     Loading customers...
                   </td>
                 </tr>
               ) : !isUnlocked ? (
                 <tr>
-                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
                     Unlock the portal to review customers.
                   </td>
                 </tr>
               ) : visibleCustomerProfiles.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-5 text-muted-foreground" colSpan={5}>
+                  <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
                     No customers match that search.
                   </td>
                 </tr>
@@ -2096,10 +3013,15 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                       </button>
                     </td>
                     <td className="px-5 py-4">
-                      <a className="break-words text-cajun hover:underline" href={`mailto:${profile.email}`}>
-                        {profile.email}
-                      </a>
+                      {profile.email ? (
+                        <a className="break-words text-cajun hover:underline" href={`mailto:${profile.email}`}>
+                          {profile.email}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">Phone only</span>
+                      )}
                     </td>
+                    <td className="px-5 py-4 text-foreground">{profile.phone || "Not provided"}</td>
                     <td className="px-5 py-4 font-semibold text-foreground">{profile.orderCount}</td>
                     <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(profile.lifetimeValue)}</td>
                     <td className="px-5 py-4 text-muted-foreground">
@@ -2141,9 +3063,13 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                   <div>
                     <dt className="text-xs font-bold uppercase text-muted-foreground">Email</dt>
                     <dd className="mt-1 break-words">
-                      <a className="text-cajun hover:underline" href={`mailto:${selectedCustomer.email}`}>
-                        {selectedCustomer.email}
-                      </a>
+                      {selectedCustomer.email ? (
+                        <a className="text-cajun hover:underline" href={`mailto:${selectedCustomer.email}`}>
+                          {selectedCustomer.email}
+                        </a>
+                      ) : (
+                        "Not provided"
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -2306,7 +3232,8 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.1fr)_minmax(340px,0.95fr)] 2xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.15fr)_minmax(380px,0.9fr)] xl:items-start">
+        <div className="space-y-6">
         <form onSubmit={handleMarketingDraftSubmit} className="border border-border bg-card">
           <div className="flex flex-col gap-3 border-b border-border p-5 md:flex-row md:items-center md:justify-between">
             <div>
@@ -2472,6 +3399,76 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               />
             </label>
 
+            <div className="space-y-3 text-sm md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-foreground">Upload Photos</span>
+                <span className="text-xs text-muted-foreground">JPG, PNG, and WebP</span>
+              </div>
+              <input
+                ref={marketingAssetInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleMarketingAssetInput}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => marketingAssetInputRef.current?.click()}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setMarketingAssetDragActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setMarketingAssetDragActive(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  if (event.currentTarget === event.target) {
+                    setMarketingAssetDragActive(false);
+                  }
+                }}
+                onDrop={handleMarketingAssetDrop}
+                className={`flex min-h-32 w-full flex-col items-center justify-center gap-3 rounded-[8px] border border-dashed px-5 py-6 text-center transition-colors ${
+                  marketingAssetDragActive ? "border-cajun bg-cajun/5" : "border-border bg-background hover:bg-muted"
+                }`}
+              >
+                <Upload className="text-cajun" size={22} />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {marketingAssetUploading ? "Uploading photos..." : "Click to add photos or drag them here"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Uploaded photos stay attached to this content item and show up in draft review.
+                  </p>
+                </div>
+              </button>
+              {marketingDraftForm.assetUploads && marketingDraftForm.assetUploads.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {marketingDraftForm.assetUploads.map((asset) => (
+                    <div key={asset.storageId} className="overflow-hidden rounded-[8px] border border-border bg-background">
+                      {asset.url ? (
+                        <img src={asset.url} alt={asset.fileName} className="h-28 w-full object-cover" />
+                      ) : (
+                        <div className="flex h-28 items-center justify-center bg-muted text-xs text-muted-foreground">{asset.fileName}</div>
+                      )}
+                      <div className="flex items-center justify-between gap-2 p-3">
+                        <p className="min-w-0 truncate text-xs font-medium text-foreground">{asset.fileName}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeMarketingUploadedAsset(asset.storageId)}
+                          className="rounded-[8px] border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             <label className="space-y-2 text-sm md:col-span-2">
               <span className="font-semibold text-foreground">Notes</span>
               <textarea
@@ -2505,154 +3502,90 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               </button>
               <button
                 type="submit"
-                disabled={marketingDraftSaving}
+                disabled={marketingDraftSaving || marketingAssetUploading}
                 className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-cajun px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Upload size={15} />
-                {marketingDraftSaving ? "Saving..." : selectedMarketingDraft ? "Update Content Item" : "Save Content Item"}
+                {marketingDraftSaving ? "Saving..." : marketingAssetUploading ? "Uploading..." : selectedMarketingDraft ? "Update Content Item" : "Save Content Item"}
               </button>
             </div>
           </div>
         </form>
 
-        <div className="space-y-6">
           <div className="border border-border bg-card">
             <div className="border-b border-border p-5">
-              <h3 className="font-serif text-2xl font-bold text-foreground">Draft Generator Preview</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This is the first-pass content pack built from items marked ready, approved, or scheduled.
-              </p>
-            </div>
-            <div className="space-y-5 p-5">
-              {!isUnlocked ? (
-                <p className="text-sm text-muted-foreground">Unlock the portal to preview generated social posts and weekly notes.</p>
-              ) : draftGeneratorSource.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Move a content item from `Draft` to `Ready`, `Approved`, or `Scheduled` to generate preview copy.
-                </p>
-              ) : (
-                <>
-                  <section className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="font-serif text-xl font-bold text-foreground">Social Drafts</h4>
-                      <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
-                        {displayedSocialDrafts.length} ready
-                      </span>
-                    </div>
-                    <p className="text-xs font-semibold uppercase text-muted-foreground">
-                      Run: {marketingGeneration?.runLabel ?? "Manual Preview"}
-                      {" • "}
-                      Provider: {generationProviderLabel}
-                      {marketingGeneration?.generatedAt ? ` • Generated ${formatDate(marketingGeneration.generatedAt)}` : ""}
-                    </p>
-                    {displayedSocialDrafts.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Add a product, event, promotion, or story item to the ready queue.</p>
-                    ) : (
-                      displayedSocialDrafts.map((draft) => (
-                        <article key={`${draft.sourceId ?? draft.title}-${draft.channelLabel}`} className="rounded-[8px] border border-border bg-background p-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
-                              {draft.channelLabel}
-                            </span>
-                            <span className="text-sm font-semibold text-foreground">{draft.title}</span>
-                          </div>
-                          <p className="mt-3 text-sm leading-relaxed text-foreground">{draft.caption}</p>
-                          <p className="mt-3 text-sm font-medium text-cajun">{draft.shortPost}</p>
-                          <p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">
-                            {draft.hashtags.map((tag) => `#${tag}`).join(" ")}
-                          </p>
-                          <p className="mt-3 text-xs text-muted-foreground">{draft.assetHint}</p>
-                        </article>
-                      ))
-                    )}
-                  </section>
-
-                  <section className="space-y-3 border-t border-border pt-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="font-serif text-xl font-bold text-foreground">Weekly Notes Preview</h4>
-                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
-                        Friday Pack
-                      </span>
-                    </div>
-                    {!displayedWeeklyNote ? (
-                      <p className="text-sm text-muted-foreground">Add a weekly update item to build a weekly notes preview.</p>
-                    ) : (
-                      <article className="rounded-[8px] border border-border bg-background p-4">
-                        <h5 className="font-semibold text-foreground">{displayedWeeklyNote.title}</h5>
-                        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">{displayedWeeklyNote.body}</p>
-                        <div className="mt-4 rounded-[8px] border border-border p-3">
-                          <p className="text-xs font-bold uppercase text-muted-foreground">Recap Social Post</p>
-                          <p className="mt-2 text-sm text-foreground">{displayedWeeklyNote.recapPost}</p>
-                        </div>
-                        <div className="mt-4">
-                          <p className="text-xs font-bold uppercase text-muted-foreground">Follow-Up Ideas</p>
-                          <div className="mt-2 space-y-2">
-                            {displayedWeeklyNote.followUps.map((item) => (
-                              <p key={item} className="text-sm text-muted-foreground">
-                                {item}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                      </article>
-                    )}
-                  </section>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="border border-border bg-card">
-            <div className="border-b border-border p-5">
-              <h3 className="font-serif text-2xl font-bold text-foreground">Saved Runs</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Every AI or fallback generation run is stored here so you can reopen recent output.
-              </p>
+              <h3 className="font-serif text-2xl font-bold text-foreground">Content Queue</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Select an item to edit or use it later for social drafts and weekly notes.</p>
             </div>
             <div>
               {!isUnlocked ? (
-                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review saved marketing packs.</p>
-              ) : savedMarketingPacks.length === 0 ? (
-                <p className="p-5 text-sm text-muted-foreground">No saved runs yet. Generate a pack to store the first one.</p>
+                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review the content queue.</p>
+              ) : marketingDraftRows.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground">No content items saved yet. Add your first weekly update or promo above.</p>
               ) : (
-                savedMarketingPacks.map((pack) => (
-                  <article key={pack._id ?? `${pack.generatedAt}-${pack.provider}`} className="border-b border-border p-4 last:border-b-0">
+                marketingDraftRows.map((draft) => (
+                  <button
+                    key={draft._id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMarketingDraftId(draft._id ?? null);
+                      setMarketingDraftNotice(null);
+                    }}
+                    className={`w-full border-b border-border p-4 text-left transition-colors last:border-b-0 hover:bg-muted ${
+                      selectedMarketingDraftId === draft._id ? "bg-muted" : ""
+                    }`}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
-                        {pack.runLabel}
-                      </span>
                       <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
-                        {pack.provider}
+                        {formatLabel(draft.type)}
                       </span>
                       <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
-                        {pack.socialDrafts.length} social
+                        {formatLabel(draft.priority)}
                       </span>
                       <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
-                        {pack.sourceCount} sources
+                        {formatLabel(draft.approvalStatus)}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm font-semibold text-foreground">{formatDate(pack.generatedAt)}</p>
-                    {pack.socialDrafts[0] ? (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        Latest lead draft: {pack.socialDrafts[0].title}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted-foreground">No social drafts in this pack.</p>
-                    )}
-                    {pack.weeklyNote ? (
-                      <p className="mt-2 text-sm text-muted-foreground">Weekly note: {pack.weeklyNote.title}</p>
+                    <p className="mt-3 font-semibold text-foreground">{draft.title}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{draft.summary}</p>
+                    {getDraftAssetItems(draft).length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {getDraftAssetItems(draft).map((asset) => (
+                          <a
+                            key={asset.key}
+                            href={asset.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full border border-border px-2 py-1 text-xs text-cajun hover:bg-cajun/5"
+                          >
+                            {asset.label}
+                          </a>
+                        ))}
+                      </div>
                     ) : null}
-                  </article>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {draft.channels.map((channel) => (
+                        <span key={channel} className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                          {channel}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs font-semibold text-muted-foreground">
+                      Updated {formatDate(draft.updatedAt)}
+                      {draft.publishBy ? ` • Publish by ${draft.publishBy}` : ""}
+                    </p>
+                  </button>
                 ))
               )}
             </div>
           </div>
+        </div>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
-            <div className="border border-border bg-card">
-              <div className="border-b border-border p-5">
-                <h3 className="font-serif text-2xl font-bold text-foreground">Generated Drafts</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+        <div className="space-y-6">
+          <div className="border border-border bg-card xl:self-start">
+            <div className="border-b border-border p-5">
+              <h3 className="font-serif text-2xl font-bold text-foreground">Generated Drafts</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
                   Every saved pack becomes individual editable drafts you can approve, schedule, and post.
                 </p>
               </div>
@@ -2695,7 +3628,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               </div>
             </div>
 
-            <form onSubmit={handleMarketingOutputSubmit} className="border border-border bg-card">
+          <form onSubmit={handleMarketingOutputSubmit} className="border border-border bg-card xl:min-w-0">
               <div className="border-b border-border p-5">
                 <h3 className="font-serif text-2xl font-bold text-foreground">Review Draft</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -2798,36 +3731,170 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                       />
                     </label>
 
-                    <label className="space-y-2 text-sm md:col-span-2">
-                      <span className="font-semibold text-foreground">Selected Photos</span>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {marketingAssetOptions.map((asset) => {
-                          const isSelected = marketingOutputForm.selectedAssets.includes(asset);
-
-                          return (
-                            <label
-                              key={asset}
-                              className={`flex items-center gap-3 rounded-[8px] border px-3 py-3 text-sm transition-colors ${
-                                isSelected ? "border-cajun bg-cajun/5 text-foreground" : "border-border bg-background text-muted-foreground"
-                              }`}
+                    <div className="space-y-2 text-sm md:col-span-2">
+                      <span className="font-semibold text-foreground">Linked Assets</span>
+                      {selectedMarketingOutputLinkedAssets.length === 0 ? (
+                        <div className="rounded-[8px] border border-border bg-background px-4 py-3 text-muted-foreground">
+                          No linked asset was saved with the source content item.
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2 rounded-[8px] border border-border bg-background p-3">
+                          {selectedMarketingOutputLinkedAssets.map((asset) => (
+                            <a
+                              key={asset.key}
+                              href={asset.href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-full border border-border px-3 py-2 text-xs text-cajun hover:bg-cajun/5"
                             >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(event) => {
-                                  const nextAssets = event.target.checked
-                                    ? [...marketingOutputForm.selectedAssets, asset]
-                                    : marketingOutputForm.selectedAssets.filter((value) => value !== asset);
-                                  updateMarketingOutputForm("selectedAssets", nextAssets);
-                                }}
-                                className="h-4 w-4 accent-cajun"
-                              />
-                              <span className="break-all">{asset}</span>
-                            </label>
-                          );
-                        })}
+                              {asset.label}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 text-sm md:col-span-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold text-foreground">Add Photos In Review</span>
+                        <span className="text-xs text-muted-foreground">
+                          {selectedMarketingOutputSourceDraft?._id ? "Attaches to the source content item" : "Source item required"}
+                        </span>
                       </div>
-                    </label>
+                      <input
+                        ref={marketingReviewAssetInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleMarketingReviewAssetInput}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={!selectedMarketingOutputSourceDraft?._id || marketingReviewAssetUploading}
+                        onClick={() => marketingReviewAssetInputRef.current?.click()}
+                        onDragEnter={(event) => {
+                          event.preventDefault();
+                          if (selectedMarketingOutputSourceDraft?._id) {
+                            setMarketingReviewAssetDragActive(true);
+                          }
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          if (selectedMarketingOutputSourceDraft?._id) {
+                            setMarketingReviewAssetDragActive(true);
+                          }
+                        }}
+                        onDragLeave={(event) => {
+                          event.preventDefault();
+                          if (event.currentTarget === event.target) {
+                            setMarketingReviewAssetDragActive(false);
+                          }
+                        }}
+                        onDrop={handleMarketingReviewAssetDrop}
+                        className={`flex min-h-28 w-full flex-col items-center justify-center gap-3 rounded-[8px] border border-dashed px-5 py-6 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                          marketingReviewAssetDragActive ? "border-cajun bg-cajun/5" : "border-border bg-background hover:bg-muted"
+                        }`}
+                      >
+                        <Upload className="text-cajun" size={20} />
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {marketingReviewAssetUploading ? "Uploading photos..." : "Click to add photos or drag them here"}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            New uploads appear immediately in the linked assets and visual picker below.
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-sm md:col-span-2">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="font-semibold text-foreground">Selected Photos</span>
+                        <span className="text-xs text-muted-foreground">
+                          {marketingOutputForm.selectedAssets.length} selected
+                        </span>
+                      </div>
+                      {selectedMarketingAssetChoices.some((asset) => asset.source === "uploaded") ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Uploaded With This Content</p>
+                          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {selectedMarketingAssetChoices
+                              .filter((asset) => asset.source === "uploaded")
+                              .map((asset) => {
+                                const isSelected = marketingOutputForm.selectedAssets.includes(asset.value);
+
+                                return (
+                                  <button
+                                    key={asset.value}
+                                    type="button"
+                                    onClick={() => toggleMarketingOutputSelectedAsset(asset.value)}
+                                    className={`overflow-hidden rounded-[8px] border text-left transition-colors ${
+                                      isSelected ? "border-cajun bg-cajun/5" : "border-border bg-background hover:bg-muted"
+                                    }`}
+                                  >
+                                    <img src={asset.previewUrl} alt={asset.label} className="h-28 w-full object-cover" />
+                                    <div className="flex items-center justify-between gap-3 p-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium text-foreground">{asset.label}</p>
+                                        <p className="text-xs text-muted-foreground">Uploaded photo</p>
+                                      </div>
+                                      {isSelected ? <Check size={16} className="shrink-0 text-cajun" /> : null}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Photo Library</p>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {selectedMarketingAssetChoices
+                            .filter((asset) => asset.source === "library")
+                            .map((asset) => {
+                              const isSelected = marketingOutputForm.selectedAssets.includes(asset.value);
+
+                              return (
+                                <button
+                                  key={asset.value}
+                                  type="button"
+                                  onClick={() => toggleMarketingOutputSelectedAsset(asset.value)}
+                                  className={`overflow-hidden rounded-[8px] border text-left transition-colors ${
+                                    isSelected ? "border-cajun bg-cajun/5" : "border-border bg-background hover:bg-muted"
+                                  }`}
+                                >
+                                  <img src={asset.previewUrl} alt={asset.label} className="h-28 w-full object-cover" />
+                                  <div className="flex items-center justify-between gap-3 p-3">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-foreground">{asset.label}</p>
+                                      <p className="text-xs text-muted-foreground">Library image</p>
+                                    </div>
+                                    {isSelected ? <Check size={16} className="shrink-0 text-cajun" /> : null}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
+                      {unresolvedSelectedMarketingAssets.length > 0 ? (
+                        <div className="rounded-[8px] border border-border bg-background p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Saved Selections</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {unresolvedSelectedMarketingAssets.map((asset) => (
+                              <button
+                                key={asset}
+                                type="button"
+                                onClick={() => toggleMarketingOutputSelectedAsset(asset)}
+                                className="rounded-full border border-border px-3 py-2 text-xs text-foreground hover:bg-muted"
+                              >
+                                {formatAssetLabel(asset)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
 
                     <label className="space-y-2 text-sm">
                       <span className="font-semibold text-foreground">Publish At</span>
@@ -2846,6 +3913,14 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                       <p className="text-muted-foreground">
                         Type: {selectedMarketingOutput.kind === "social" ? "Social Draft" : "Weekly Note"}
                       </p>
+                      {selectedMarketingOutput.publishedPlatforms && selectedMarketingOutput.publishedPlatforms.length > 0 ? (
+                        <p className="text-muted-foreground">
+                          Posted: {selectedMarketingOutput.publishedPlatforms.map((platform) => formatLabel(platform)).join(", ")}
+                        </p>
+                      ) : null}
+                      {selectedMarketingOutput.lastPublishError ? (
+                        <p className="text-destructive">Last auto-post error: {selectedMarketingOutput.lastPublishError}</p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -2857,66 +3932,181 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                     )}
                     <button
                       type="submit"
-                      disabled={marketingOutputSaving}
+                      disabled={marketingOutputSaving || marketingOutputPublishing}
                       className="inline-flex items-center justify-center gap-2 rounded-[8px] bg-cajun px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Upload size={15} />
                       {marketingOutputSaving ? "Saving..." : "Update Draft"}
                     </button>
+                    <button
+                      type="button"
+                      disabled={marketingOutputSaving || marketingOutputPublishing}
+                      onClick={() => void saveMarketingOutput("approved")}
+                      className="inline-flex items-center justify-center gap-2 rounded-[8px] border border-cajun px-4 py-3 text-sm font-semibold text-cajun transition-colors hover:bg-cajun/5 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Check size={15} />
+                      {marketingOutputSaving ? "Saving..." : "Approve Draft"}
+                    </button>
+                    {selectedMarketingOutput?.kind === "social" ? (
+                      <button
+                        type="button"
+                        disabled={marketingOutputSaving || marketingOutputPublishing}
+                        onClick={() => void handleAutoPostApprovedDraft()}
+                        className="inline-flex items-center justify-center gap-2 rounded-[8px] border border-gold px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Mail size={15} />
+                        {marketingOutputPublishing ? "Sending Approval..." : "Send Final Approval Email"}
+                      </button>
+                    ) : null}
                   </div>
                 </>
               )}
-            </form>
+          </form>
+        </div>
+
+        <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+          <div className="border border-border bg-card">
+            <div className="border-b border-border p-5">
+              <h3 className="font-serif text-2xl font-bold text-foreground">Draft Generator Preview</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This is the first-pass content pack built from items marked ready, approved, or scheduled.
+              </p>
+            </div>
+            <div className="space-y-5 p-5">
+              {!isUnlocked ? (
+                <p className="text-sm text-muted-foreground">Unlock the portal to preview generated social posts and weekly notes.</p>
+              ) : draftGeneratorSource.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Move a content item from `Draft` to `Ready`, `Approved`, or `Scheduled` to generate preview copy.
+                </p>
+              ) : (
+                <>
+                  <section className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-serif text-xl font-bold text-foreground">Social Drafts</h4>
+                      <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                        {displayedSocialDrafts.length} ready
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">
+                      Run: {marketingGeneration?.runLabel ?? "Manual Preview"}
+                      {" • "}
+                      Provider: {generationProviderLabel}
+                      {marketingGeneration?.generatedAt ? ` • Generated ${formatDate(marketingGeneration.generatedAt)}` : ""}
+                    </p>
+                    {displayedSocialDrafts.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Add a product, event, promotion, or story item to the ready queue.</p>
+                    ) : (
+                      displayedSocialDrafts.map((draft) => (
+                        <article key={`${draft.sourceId ?? draft.title}-${draft.channelLabel}`} className="rounded-[8px] border border-border bg-background p-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
+                              {draft.channelLabel}
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">{draft.title}</span>
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-foreground">{draft.caption}</p>
+                          <p className="mt-3 text-sm font-medium text-cajun">{draft.shortPost}</p>
+                          <p className="mt-3 text-xs font-semibold uppercase text-muted-foreground">
+                            {draft.hashtags.map((tag) => `#${tag}`).join(" ")}
+                          </p>
+                          <p className="mt-3 text-xs text-muted-foreground">{draft.assetHint}</p>
+                          {draft.sourceId ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {getDraftAssetItems(marketingDraftRows.find((item) => item._id === draft.sourceId)).map((asset) => (
+                                <a
+                                  key={asset.key}
+                                  href={asset.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded-full border border-border px-2 py-1 text-xs text-cajun hover:bg-cajun/5"
+                                >
+                                  {asset.label}
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
+                        </article>
+                      ))
+                    )}
+                  </section>
+
+                  <section className="space-y-3 border-t border-border pt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-serif text-xl font-bold text-foreground">Weekly Notes Preview</h4>
+                      <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                        Friday Pack
+                      </span>
+                    </div>
+                    {!displayedWeeklyNote ? (
+                      <p className="text-sm text-muted-foreground">Add a weekly update item to build a weekly notes preview.</p>
+                    ) : (
+                      <article className="rounded-[8px] border border-border bg-background p-4">
+                        <h5 className="font-semibold text-foreground">{displayedWeeklyNote.title}</h5>
+                        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-foreground">{displayedWeeklyNote.body}</p>
+                        <div className="mt-4 rounded-[8px] border border-border p-3">
+                          <p className="text-xs font-bold uppercase text-muted-foreground">Recap Social Post</p>
+                          <p className="mt-2 text-sm text-foreground">{displayedWeeklyNote.recapPost}</p>
+                        </div>
+                        <div className="mt-4">
+                          <p className="text-xs font-bold uppercase text-muted-foreground">Follow-Up Ideas</p>
+                          <div className="mt-2 space-y-2">
+                            {displayedWeeklyNote.followUps.map((item) => (
+                              <p key={item} className="text-sm text-muted-foreground">
+                                {item}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      </article>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="border border-border bg-card">
             <div className="border-b border-border p-5">
-              <h3 className="font-serif text-2xl font-bold text-foreground">Content Queue</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Select an item to edit or use it later for social drafts and weekly notes.</p>
+              <h3 className="font-serif text-2xl font-bold text-foreground">Saved Runs</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Every AI or fallback generation run is stored here so you can reopen recent output.
+              </p>
             </div>
             <div>
               {!isUnlocked ? (
-                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review the content queue.</p>
-              ) : marketingDraftRows.length === 0 ? (
-                <p className="p-5 text-sm text-muted-foreground">No content items saved yet. Add your first weekly update or promo above.</p>
+                <p className="p-5 text-sm text-muted-foreground">Unlock the portal to review saved marketing packs.</p>
+              ) : savedMarketingPacks.length === 0 ? (
+                <p className="p-5 text-sm text-muted-foreground">No saved runs yet. Generate a pack to store the first one.</p>
               ) : (
-                marketingDraftRows.map((draft) => (
-                  <button
-                    key={draft._id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedMarketingDraftId(draft._id ?? null);
-                      setMarketingDraftNotice(null);
-                    }}
-                    className={`w-full border-b border-border p-4 text-left transition-colors last:border-b-0 hover:bg-muted ${
-                      selectedMarketingDraftId === draft._id ? "bg-muted" : ""
-                    }`}
-                  >
+                savedMarketingPacks.map((pack) => (
+                  <article key={pack._id ?? `${pack.generatedAt}-${pack.provider}`} className="border-b border-border p-4 last:border-b-0">
                     <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-[8px] bg-cajun px-2 py-1 text-xs font-bold uppercase text-primary-foreground">
+                        {pack.runLabel}
+                      </span>
                       <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
-                        {formatLabel(draft.type)}
+                        {pack.provider}
                       </span>
                       <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
-                        {formatLabel(draft.priority)}
+                        {pack.socialDrafts.length} social
                       </span>
                       <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
-                        {formatLabel(draft.approvalStatus)}
+                        {pack.sourceCount} sources
                       </span>
                     </div>
-                    <p className="mt-3 font-semibold text-foreground">{draft.title}</p>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{draft.summary}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {draft.channels.map((channel) => (
-                        <span key={channel} className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
-                          {channel}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="mt-3 text-xs font-semibold text-muted-foreground">
-                      Updated {formatDate(draft.updatedAt)}
-                      {draft.publishBy ? ` • Publish by ${draft.publishBy}` : ""}
-                    </p>
-                  </button>
+                    <p className="mt-3 text-sm font-semibold text-foreground">{formatDate(pack.generatedAt)}</p>
+                    {pack.socialDrafts[0] ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Latest lead draft: {pack.socialDrafts[0].title}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">No social drafts in this pack.</p>
+                    )}
+                    {pack.weeklyNote ? (
+                      <p className="mt-2 text-sm text-muted-foreground">Weekly note: {pack.weeklyNote.title}</p>
+                    ) : null}
+                  </article>
                 ))
               )}
             </div>
@@ -3123,6 +4313,26 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                       <p className="text-xs font-bold uppercase text-muted-foreground">Total</p>
                       <p className="mt-1 text-sm font-semibold">{formatCurrency(activeItem.total)}</p>
                     </div>
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Fulfillment</p>
+                      <p className="mt-1 text-sm font-semibold">{formatLabel(getOrderFulfillmentStatus(activeItem))}</p>
+                    </div>
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Method</p>
+                      <p className="mt-1 text-sm font-semibold">{formatLabel(getOrderFulfillmentMethod(activeItem))}</p>
+                    </div>
+                    <div className="border border-border bg-background p-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Salesperson</p>
+                      <p className="mt-1 text-sm font-semibold">{activeItem.salesperson || "Not provided"}</p>
+                    </div>
+                    <div className="border border-border bg-background p-3 md:col-span-3">
+                      <p className="text-xs font-bold uppercase text-muted-foreground">Kitchen Notes</p>
+                      <p className="mt-1 text-sm font-semibold">
+                        {activeItem.internalNotes || activeItem.neededBy || activeItem.assignedTo
+                          ? [activeItem.neededBy ? `Needed by ${activeItem.neededBy}` : null, activeItem.assignedTo ? `Owner: ${activeItem.assignedTo}` : null, activeItem.internalNotes].filter(Boolean).join(" • ")
+                          : "No fulfillment details saved yet."}
+                      </p>
+                    </div>
                   </div>
                   {activeItem.promoCode && (
                     <div className="mt-3 border border-border bg-background p-3 text-sm">
@@ -3173,8 +4383,9 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
             <tr>
               <th className="px-5 py-3">Customer</th>
-              <th className="px-5 py-3">Email</th>
+              <th className="px-5 py-3">Contact</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Fulfillment</th>
               <th className="px-5 py-3">Payment</th>
               <th className="px-5 py-3">Total</th>
               <th className="px-5 py-3">Created</th>
@@ -3183,19 +4394,19 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           <tbody>
             {isLoading ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={7}>
                   Loading orders...
                 </td>
               </tr>
             ) : !isUnlocked ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={7}>
                   Unlock the portal to review orders.
                 </td>
               </tr>
             ) : orderItems.length === 0 ? (
               <tr>
-                <td className="px-5 py-5 text-muted-foreground" colSpan={6}>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={7}>
                   No order inquiries yet.
                 </td>
               </tr>
@@ -3203,13 +4414,279 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               orderItems.map((item) => (
                 <tr key={item.id} className="border-b border-border last:border-b-0">
                   <td className="px-5 py-4 font-semibold text-foreground">{item.customerName}</td>
-                  <td className="px-5 py-4 text-cajun">{item.email}</td>
+                  <td className="px-5 py-4">
+                    <div className="space-y-1">
+                      <p className="text-cajun">{item.email || "No email"}</p>
+                      <p className="text-muted-foreground">{item.phone}</p>
+                    </div>
+                  </td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {item.status === "submitted" ? "Submitted" : "Checkout started"}
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${getFulfillmentStatusTone(getOrderFulfillmentStatus(item))}`}>
+                      {formatLabel(getOrderFulfillmentStatus(item))}
+                    </span>
                   </td>
                   <td className="px-5 py-4 text-muted-foreground">{item.paymentMethod === "stripe" ? "Stripe" : "Email"}</td>
                   <td className="px-5 py-4 font-semibold">{formatCurrency(item.total)}</td>
                   <td className="px-5 py-4 text-muted-foreground">{formatDate(item.createdAt)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const promosPanel = (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 border border-border bg-card p-5 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="font-serif text-2xl font-bold text-foreground">Promo Codes</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Monitor every promo code, who used it, what they ordered, and how much discount it drove.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleDownloadPromoSummary(visiblePromoSummaryRows)}
+            disabled={!isUnlocked || visiblePromoSummaryRows.length === 0}
+            className="inline-flex items-center gap-2 rounded-[8px] bg-cajun px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download size={15} />
+            Export summary
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownloadPromoUsage(visiblePromoUsageRows)}
+            disabled={!isUnlocked || visiblePromoUsageRows.length === 0}
+            className="inline-flex items-center gap-2 rounded-[8px] border border-border px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download size={15} />
+            Export usage
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="border border-border bg-card p-5">
+          <p className="text-sm font-semibold text-muted-foreground">Promo Redemptions</p>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? promoUsageRows.length : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Orders with a recorded promo discount.</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <p className="text-sm font-semibold text-muted-foreground">Discount Given</p>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? formatCurrency(promoDiscountTotal) : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Total dollars discounted across all promo uses.</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <p className="text-sm font-semibold text-muted-foreground">Revenue with Promos</p>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? formatCurrency(promoRevenueTotal) : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Order totals attached to promo-driven purchases.</p>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <p className="text-sm font-semibold text-muted-foreground">Returning Customer Uses</p>
+          <p className="mt-3 text-3xl font-bold">{isUnlocked ? promoReturningUseCount : "-"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Helpful for spotting loyalty versus first-order promos.</p>
+        </div>
+      </div>
+
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="font-serif text-xl font-bold text-foreground">Search Promo Activity</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Search by code, customer, email, phone, payment method, salesperson, or ordered item.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-2 rounded-[8px] border border-border bg-background px-3 py-2">
+          <Search size={16} className="text-muted-foreground" />
+          <input
+            type="search"
+            value={promoSearch}
+            onChange={(event) => setPromoSearch(event.target.value)}
+            placeholder="Search promo codes or customers"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border border-border bg-card">
+        <div className="border-b border-border p-5">
+          <h3 className="font-serif text-xl font-bold text-foreground">Promo Summary</h3>
+        </div>
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">Code</th>
+              <th className="px-5 py-3">Schedule</th>
+              <th className="px-5 py-3">Cap</th>
+              <th className="px-5 py-3">Uses</th>
+              <th className="px-5 py-3">Unique Customers</th>
+              <th className="px-5 py-3">New / Returning</th>
+              <th className="px-5 py-3">Completed / Canceled</th>
+              <th className="px-5 py-3">Discount Given</th>
+              <th className="px-5 py-3">Revenue</th>
+              <th className="px-5 py-3">Avg Order</th>
+              <th className="px-5 py-3">Margin Impact</th>
+              <th className="px-5 py-3">Sources</th>
+              <th className="px-5 py-3">Last Used</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={12}>
+                  Loading promo performance...
+                </td>
+              </tr>
+            ) : !isUnlocked ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={12}>
+                  Unlock the portal to review promo performance.
+                </td>
+              </tr>
+            ) : visiblePromoSummaryRows.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={12}>
+                  No promo codes match that search.
+                </td>
+              </tr>
+            ) : (
+              visiblePromoSummaryRows.map((summary) => (
+                <tr key={summary.code} className="border-b border-border last:border-b-0">
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-foreground">{summary.code}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{summary.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{summary.channelHint ?? "No channel set"}</p>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    <p>{formatShortDate(summary.startsAt)} to {formatShortDate(summary.endsAt)}</p>
+                    <p className="mt-1 text-xs font-semibold uppercase">
+                      {getPromoScheduleStatus(summary)}
+                    </p>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {summary.maxRedemptions === undefined
+                      ? "Unlimited"
+                      : `${summary.uses}/${summary.maxRedemptions} used${summary.remainingRedemptions !== undefined ? `, ${summary.remainingRedemptions} left` : ""}`}
+                  </td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{summary.uses}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{summary.uniqueCustomers}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{summary.newCustomerUses} / {summary.returningCustomerUses}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{summary.completedOrders} / {summary.canceledOrders}</td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(summary.totalDiscount)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatCurrency(summary.totalRevenue)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatCurrency(summary.averageOrderValue)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatCurrency(summary.marginImpact)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{summary.sourceBreakdown.join(", ") || "None yet"}</td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {summary.lastUsedAt ? formatDate(summary.lastUsedAt) : "Never used"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="overflow-x-auto border border-border bg-card">
+        <div className="border-b border-border p-5">
+          <h3 className="font-serif text-xl font-bold text-foreground">Usage Log</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track who used each code, when they used it, and whether it was a first-time or repeat order.
+          </p>
+        </div>
+        <table className="w-full min-w-[1520px] text-left text-sm">
+          <thead className="border-b border-border bg-background text-xs font-bold uppercase text-muted-foreground">
+            <tr>
+              <th className="px-5 py-3">Date / Time</th>
+              <th className="px-5 py-3">Customer</th>
+              <th className="px-5 py-3">Email</th>
+              <th className="px-5 py-3">Phone</th>
+              <th className="px-5 py-3">Code</th>
+              <th className="px-5 py-3">Source / Campaign</th>
+              <th className="px-5 py-3">Discount</th>
+              <th className="px-5 py-3">Subtotal</th>
+              <th className="px-5 py-3">Total</th>
+              <th className="px-5 py-3">Payment</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Customer Type</th>
+              <th className="px-5 py-3">Salesperson</th>
+              <th className="px-5 py-3">Items</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={14}>
+                  Loading promo usage...
+                </td>
+              </tr>
+            ) : !isUnlocked ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={14}>
+                  Unlock the portal to review promo usage.
+                </td>
+              </tr>
+            ) : visiblePromoUsageRows.length === 0 ? (
+              <tr>
+                <td className="px-5 py-5 text-muted-foreground" colSpan={14}>
+                  No promo redemptions match that search yet.
+                </td>
+              </tr>
+            ) : (
+              visiblePromoUsageRows.map((usage) => (
+                <tr key={usage.id} className="border-b border-border align-top last:border-b-0">
+                  <td className="px-5 py-4 text-muted-foreground">{formatDate(usage.createdAt)}</td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{usage.customerName}</td>
+                  <td className="px-5 py-4">
+                    {usage.email ? (
+                      <a className="break-words text-cajun hover:underline" href={`mailto:${usage.email}`}>
+                        {usage.email}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Not provided</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-4 text-foreground">
+                    <a className="hover:underline" href={`tel:${usage.phone}`}>
+                      {usage.phone}
+                    </a>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-xs font-bold uppercase text-foreground">
+                      {usage.promoCode}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    <p>{usage.promoSource ?? "Not provided"}</p>
+                    <p className="mt-1 text-xs">{usage.promoCampaign ?? "No campaign"}</p>
+                  </td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(usage.promoDiscount)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{formatCurrency(usage.subtotal)}</td>
+                  <td className="px-5 py-4 font-semibold text-foreground">{formatCurrency(usage.total)}</td>
+                  <td className="px-5 py-4 text-muted-foreground">{usage.paymentMethod === "stripe" ? "Stripe" : "Email"}</td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {usage.status === "submitted" ? "Submitted" : "Checkout started"} / {formatLabel(getOrderFulfillmentStatus(usage))}
+                  </td>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${
+                        usage.customerType === "returning" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {usage.customerType}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-muted-foreground">{usage.salesperson || "Not provided"}</td>
+                  <td className="px-5 py-4 text-muted-foreground">
+                    {usage.items.map((item) => `${item.name} x${item.quantity}`).join(", ")}
+                  </td>
                 </tr>
               ))
             )}
@@ -3356,6 +4833,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
               <option value="spicy">Spicy</option>
               <option value="turkey">Turkey</option>
               <option value="mini">Mini Pies</option>
+              <option value="mini-unfried">Mini Pies Unfried</option>
             </select>
           </label>
           <label className="grid gap-2 text-sm font-semibold text-foreground">
@@ -3615,6 +5093,260 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     </div>
   );
 
+  const fulfillmentColumns = fulfillmentStatusOptions.map((status) => ({
+    status,
+    label: formatLabel(status),
+    orders: fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === status),
+  }));
+  const fulfillmentDueSoon = fulfillmentOrders.filter((order) => {
+    if (!order.neededBy) {
+      return false;
+    }
+
+    const dueAt = Date.parse(order.neededBy);
+    return Number.isFinite(dueAt) && dueAt <= Date.now() + 48 * 60 * 60 * 1000 && getOrderFulfillmentStatus(order) !== "completed";
+  }).length;
+  const fulfillmentReadyCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "ready").length;
+  const fulfillmentInKitchenCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "in_kitchen").length;
+
+  const fulfillmentPanel = (
+    <div className="space-y-6">
+      <div className="border border-border bg-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="font-serif text-2xl font-bold text-foreground">Fulfillment</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Move orders from intake to kitchen, then mark them ready and completed.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[8px] border border-border bg-background p-4">
+              <p className="text-xs font-bold uppercase text-muted-foreground">Due Soon</p>
+              <p className="mt-2 text-2xl font-bold text-foreground">{isUnlocked ? fulfillmentDueSoon : "-"}</p>
+            </div>
+            <div className="rounded-[8px] border border-border bg-background p-4">
+              <p className="text-xs font-bold uppercase text-muted-foreground">In Kitchen</p>
+              <p className="mt-2 text-2xl font-bold text-foreground">{isUnlocked ? fulfillmentInKitchenCount : "-"}</p>
+            </div>
+            <div className="rounded-[8px] border border-border bg-background p-4">
+              <p className="text-xs font-bold uppercase text-muted-foreground">Ready</p>
+              <p className="mt-2 text-2xl font-bold text-foreground">{isUnlocked ? fulfillmentReadyCount : "-"}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.8fr)]">
+        <div className="overflow-x-auto">
+          <div className="grid min-w-[1200px] gap-4 xl:grid-cols-3 2xl:grid-cols-6">
+            {fulfillmentColumns.map((column) => (
+              <section key={column.status} className="border border-border bg-card">
+                <div className="border-b border-border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-serif text-xl font-bold text-foreground">{column.label}</h3>
+                    <span className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${getFulfillmentStatusTone(column.status)}`}>
+                      {isUnlocked ? column.orders.length : "-"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{getFulfillmentStatusDescription(column.status)}</p>
+                </div>
+                <div className="space-y-3 p-3">
+                  {!isUnlocked ? (
+                    <p className="text-sm text-muted-foreground">Unlock the portal to review fulfillment.</p>
+                  ) : column.orders.length === 0 ? (
+                    <p className="rounded-[8px] border border-dashed border-border p-3 text-sm text-muted-foreground">
+                      No orders in this stage.
+                    </p>
+                  ) : (
+                    column.orders.map((order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedFulfillmentOrderId(order.id);
+                          setFulfillmentNotice(null);
+                        }}
+                        className={`w-full rounded-[8px] border p-3 text-left transition-colors ${
+                          selectedFulfillmentOrder?.id === order.id
+                            ? "border-cajun bg-cajun/5"
+                            : "border-border bg-background hover:bg-muted"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-foreground">{order.customerName}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{formatCurrency(order.total)}</p>
+                          </div>
+                          <span className="rounded-[8px] bg-gold/20 px-2 py-1 text-[11px] font-bold uppercase text-foreground">
+                            {formatLabel(getOrderFulfillmentMethod(order))}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} total item{order.items.length === 1 ? "" : "s"}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {order.neededBy ? `Needed by ${order.neededBy}` : "No target time yet"}
+                        </p>
+                        {order.assignedTo ? (
+                          <p className="mt-1 text-xs font-semibold uppercase text-muted-foreground">Owner: {order.assignedTo}</p>
+                        ) : null}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+
+        <aside className="border border-border bg-card p-5">
+          {!selectedFulfillmentOrder ? (
+            <div className="flex min-h-[420px] items-center justify-center text-center">
+              <div>
+                <Truck className="mx-auto mb-3 text-muted-foreground" size={36} />
+                <p className="font-semibold text-foreground">No order selected</p>
+                <p className="mt-1 text-sm text-muted-foreground">Choose an order from the board to plan fulfillment.</p>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleFulfillmentSubmit} className="space-y-5">
+              <div className="border-b border-border pb-5">
+                <p className="text-xs font-bold uppercase text-muted-foreground">Fulfillment Detail</p>
+                <h3 className="mt-2 font-serif text-3xl font-bold text-foreground">{selectedFulfillmentOrder.customerName}</h3>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className={`rounded-[8px] px-2 py-1 text-xs font-bold uppercase ${getFulfillmentStatusTone(getOrderFulfillmentStatus(selectedFulfillmentOrder))}`}>
+                    {formatLabel(getOrderFulfillmentStatus(selectedFulfillmentOrder))}
+                  </span>
+                  <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                    {selectedFulfillmentOrder.paymentMethod === "stripe" ? "Stripe" : "Email"}
+                  </span>
+                  <span className="rounded-[8px] border border-border px-2 py-1 text-xs font-bold uppercase text-muted-foreground">
+                    {formatCurrency(selectedFulfillmentOrder.total)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-semibold text-foreground">
+                  Stage
+                  <select
+                    value={fulfillmentForm.fulfillmentStatus}
+                    onChange={(event) => updateFulfillmentForm("fulfillmentStatus", event.target.value)}
+                    className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+                  >
+                    {fulfillmentStatusOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {formatLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-foreground">
+                  Fulfillment Type
+                  <select
+                    value={fulfillmentForm.fulfillmentMethod}
+                    onChange={(event) => updateFulfillmentForm("fulfillmentMethod", event.target.value)}
+                    className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+                  >
+                    {fulfillmentMethodOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {formatLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-foreground">
+                  Needed By
+                  <input
+                    type="datetime-local"
+                    value={fulfillmentForm.neededBy}
+                    onChange={(event) => updateFulfillmentForm("neededBy", event.target.value)}
+                    className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-foreground">
+                  Assigned To
+                  <input
+                    value={fulfillmentForm.assignedTo}
+                    onChange={(event) => updateFulfillmentForm("assignedTo", event.target.value)}
+                    placeholder="Mame, kitchen, driver, event team..."
+                    className="rounded-[8px] border border-border bg-background px-3 py-2 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-[8px] border border-border bg-background p-4">
+                <p className="text-xs font-bold uppercase text-muted-foreground">Order Summary</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  {selectedFulfillmentOrder.items.map((item) => (
+                    <div key={`${selectedFulfillmentOrder.id}-${item.productId}`} className="flex items-center justify-between gap-3">
+                      <span className="text-foreground">{item.name}</span>
+                      <span className="font-semibold text-foreground">Qty {item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Customer note: {selectedFulfillmentOrder.notes || "No customer note included."}
+                </p>
+              </div>
+
+              <label className="grid gap-2 text-sm font-semibold text-foreground">
+                Internal Notes
+                <textarea
+                  value={fulfillmentForm.internalNotes}
+                  onChange={(event) => updateFulfillmentForm("internalNotes", event.target.value)}
+                  rows={6}
+                  placeholder="Pickup instructions, packaging notes, follow-up reminders, allergies, event setup..."
+                  className="rounded-[8px] border border-border bg-background px-3 py-3 font-normal outline-none focus:ring-2 focus:ring-cajun/40"
+                />
+              </label>
+
+              <div className="grid gap-3 text-sm text-muted-foreground">
+                <p>
+                  Created: <span className="font-semibold text-foreground">{formatDate(selectedFulfillmentOrder.createdAt)}</span>
+                </p>
+                <p>
+                  Last update:{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedFulfillmentOrder.lastFulfillmentUpdateAt
+                      ? formatDate(selectedFulfillmentOrder.lastFulfillmentUpdateAt)
+                      : "Not updated yet"}
+                  </span>
+                </p>
+              </div>
+
+              {fulfillmentNotice ? (
+                <div className="rounded-[8px] border border-border bg-background px-4 py-3 text-sm text-foreground">
+                  {fulfillmentNotice}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={fulfillmentSaving || !fallbackKey}
+                  className="rounded-[8px] bg-cajun px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-cajun-light disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {fulfillmentSaving ? "Saving..." : "Save Fulfillment Plan"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePage("orders");
+                    setSelectedId(selectedFulfillmentOrder.id);
+                  }}
+                  className="rounded-[8px] border border-border px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  Open Order Detail
+                </button>
+              </div>
+            </form>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+
   const placeholderPanel = (title: string, description: string) => (
     <div className="border border-border bg-card p-6">
       <h2 className="font-serif text-2xl font-bold text-foreground">{title}</h2>
@@ -3625,6 +5357,10 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const renderPageContent = () => {
     if (activePage === "orders") {
       return ordersPanel;
+    }
+
+    if (activePage === "promos") {
+      return promosPanel;
     }
 
     if (activePage === "products") {
@@ -3641,6 +5377,10 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
 
     if (activePage === "marketing") {
       return marketingPanel;
+    }
+
+    if (activePage === "fulfillment") {
+      return fulfillmentPanel;
     }
 
     if (activePage === "reports") {
@@ -3677,8 +5417,8 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
             <Link to="/" className="font-serif text-xl font-bold text-foreground">
               Mame's
             </Link>
-            <nav className="flex flex-wrap items-center gap-1">
-              {topNavItems.map((item) => (
+            <nav className="flex max-w-full items-center gap-1 overflow-x-auto pb-1">
+              {adminNavItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -3851,11 +5591,13 @@ const Admin = () => {
     return <AdminPortalPasswordOnly />;
   }
 
+  const redirectPath = window.location.pathname.startsWith("/backoffice") ? "/backoffice" : "/admin";
+
   return (
     <AuthKitProvider
       clientId={workosClientId}
       apiHostname={workosApiHostname}
-      redirectUri={`${window.location.origin}/admin`}
+      redirectUri={`${window.location.origin}${redirectPath}`}
       onRefreshFailure={({ signIn }) => {
         void signIn({ screenHint: "sign-in" });
       }}

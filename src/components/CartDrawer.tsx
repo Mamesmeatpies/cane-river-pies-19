@@ -8,6 +8,53 @@ import { buildStripePaymentLink, hasStripePaymentLink } from "@/lib/stripePaymen
 import { getMiniMinimumOrderMessage, isMiniProduct, MINI_MINIMUM_DOZENS } from "@/lib/productRules";
 
 const STRIPE_CHECKOUT_ENABLED = false;
+type PreferredContactMethod = "email" | "phone";
+
+const getPhoneOrderReplyMessage = ({
+  orderLines,
+  total,
+}: {
+  orderLines: string;
+  total: number;
+}) =>
+  [
+    "Thank you for your purchase! Mame's Cane River Meatpies.",
+    "",
+    "Order:",
+    orderLines,
+    "",
+    `Sales price: $${total.toFixed(2)}`,
+  ].join("\n");
+
+const getPromoAttribution = () => {
+  if (typeof window === "undefined") {
+    return {
+      promoSource: undefined,
+      promoCampaign: undefined,
+    };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const utmSource = searchParams.get("utm_source")?.trim();
+  const utmCampaign = searchParams.get("utm_campaign")?.trim();
+  const utmMedium = searchParams.get("utm_medium")?.trim();
+  const referrer = document.referrer;
+
+  let fallbackSource: string | undefined;
+
+  if (referrer) {
+    try {
+      fallbackSource = new URL(referrer).hostname.replace(/^www\./i, "");
+    } catch {
+      fallbackSource = undefined;
+    }
+  }
+
+  return {
+    promoSource: utmSource || utmMedium || fallbackSource || "direct",
+    promoCampaign: utmCampaign || undefined,
+  };
+};
 
 const CartDrawer = () => {
   const {
@@ -28,7 +75,14 @@ const CartDrawer = () => {
   const createOrder = useMutation(api.orders.create);
   const submitOrder = useAction(api.notifications.submitOrder);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    preferredContactMethod: "email" as PreferredContactMethod,
+    salesperson: "",
+    notes: "",
+  });
   const [promoEntry, setPromoEntry] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const miniItem = items.find((item) => isMiniProduct(item.id));
@@ -64,10 +118,14 @@ const CartDrawer = () => {
   };
 
   const saveOrder = async (paymentMethod: "stripe" | "email") => {
+    const promoAttribution = getPromoAttribution();
+
     await createOrder({
       name: form.name.trim(),
-      email: form.email.trim(),
+      email: form.email.trim() || undefined,
       phone: form.phone.trim(),
+      preferredContactMethod: form.preferredContactMethod,
+      salesperson: form.salesperson.trim() || undefined,
       notes: form.notes.trim() || undefined,
       paymentMethod,
       status: paymentMethod === "stripe" ? "checkout_started" : "submitted",
@@ -81,15 +139,21 @@ const CartDrawer = () => {
       subtotal: cartSubtotal,
       promoCode: appliedPromo?.code,
       promoDiscount,
+      promoSource: promoAttribution.promoSource,
+      promoCampaign: promoAttribution.promoCampaign,
       total: totalPrice,
     });
   };
 
   const submitEmailOrder = async () => {
+    const promoAttribution = getPromoAttribution();
+
     const result = await submitOrder({
       name: form.name.trim(),
-      email: form.email.trim(),
+      email: form.email.trim() || undefined,
       phone: form.phone.trim(),
+      preferredContactMethod: form.preferredContactMethod,
+      salesperson: form.salesperson.trim() || undefined,
       notes: form.notes.trim() || undefined,
       items: items.map((item) => ({
         productId: item.id,
@@ -101,20 +165,37 @@ const CartDrawer = () => {
       subtotal: cartSubtotal,
       promoCode: appliedPromo?.code,
       promoDiscount,
+      promoSource: promoAttribution.promoSource,
+      promoCampaign: promoAttribution.promoCampaign,
       total: totalPrice,
     });
 
     if (result.customerEmailSent) {
-      toast.success("Order submitted! Check your email for your order confirmation.");
+      toast.success("Order submitted!", {
+        description: "Check your email for your order confirmation.",
+      });
+    } else if (form.preferredContactMethod === "phone") {
+      toast.success("Order submitted!", {
+        description:
+          result.customerReplyMessage ||
+          getPhoneOrderReplyMessage({
+            orderLines: items.map((item) => `${item.name} x${item.quantity}`).join(", "),
+            total: totalPrice,
+          }),
+      });
     } else if (result.notificationSent) {
-      toast.success("Order submitted! We received it and will follow up soon.");
+      toast.success("Order submitted!", {
+        description: "We received it and will follow up soon.",
+      });
     } else {
-      toast.success("Order saved! We received it, but the email confirmation did not send.");
+      toast.success("Order saved!", {
+        description: "We received it, but the email confirmation did not send.",
+      });
     }
 
     clearCart();
     setShowCheckout(false);
-    setForm({ name: "", email: "", phone: "", notes: "" });
+    setForm({ name: "", email: "", phone: "", preferredContactMethod: "email", salesperson: "", notes: "" });
     closeCart();
   };
 
@@ -143,8 +224,12 @@ const CartDrawer = () => {
       toast.error(getMiniMinimumOrderMessage());
       return;
     }
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      toast.error("Please fill in your name, email, and phone number.");
+    if (!form.name.trim() || !form.phone.trim()) {
+      toast.error("Please fill in your name and cell phone number.");
+      return;
+    }
+    if (form.preferredContactMethod === "email" && !form.email.trim()) {
+      toast.error("Please add your email address or switch the reply method to cell phone.");
       return;
     }
     setSubmitting(true);
@@ -203,6 +288,37 @@ const CartDrawer = () => {
           ) : showCheckout ? (
             <form onSubmit={(e) => handleSubmit(e, STRIPE_CHECKOUT_ENABLED ? "stripe" : "email")} className="space-y-4">
               <h3 className="font-serif text-lg font-bold text-foreground mb-2">Contact Info</h3>
+              <div className="rounded-xl border border-border bg-muted/40 p-4">
+                <p className="text-sm font-semibold text-foreground">How should we send your order reply?</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {[
+                    { value: "email" as PreferredContactMethod, label: "Email reply", detail: "We will send your order confirmation by email." },
+                    { value: "phone" as PreferredContactMethod, label: "Cell phone reply", detail: "Use your cell number instead of email for the order reply." },
+                  ].map((option) => (
+                    <label
+                      key={option.value}
+                      className={`cursor-pointer rounded-lg border px-4 py-3 transition-colors ${
+                        form.preferredContactMethod === option.value
+                          ? "border-cajun bg-cajun/5"
+                          : "border-border bg-background hover:bg-muted"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="preferredContactMethod"
+                        value={option.value}
+                        checked={form.preferredContactMethod === option.value}
+                        onChange={(e) =>
+                          setForm({ ...form, preferredContactMethod: e.target.value as PreferredContactMethod })
+                        }
+                        className="sr-only"
+                      />
+                      <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{option.detail}</p>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <input
                 type="text"
                 placeholder="Your Name *"
@@ -214,21 +330,29 @@ const CartDrawer = () => {
               />
               <input
                 type="email"
-                placeholder="Email *"
+                placeholder={form.preferredContactMethod === "email" ? "Email *" : "Email (optional)"}
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50 outline-none"
-                required
+                required={form.preferredContactMethod === "email"}
                 maxLength={255}
               />
               <input
                 type="tel"
-                placeholder="Phone *"
+                placeholder="Cell Phone *"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50 outline-none"
                 required
                 maxLength={20}
+              />
+              <input
+                type="text"
+                placeholder="Salesperson (optional)"
+                value={form.salesperson}
+                onChange={(e) => setForm({ ...form, salesperson: e.target.value })}
+                className="w-full px-4 py-3 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50 outline-none"
+                maxLength={100}
               />
               <textarea
                 placeholder="Special instructions (optional)"
@@ -278,7 +402,7 @@ const CartDrawer = () => {
                       className="w-full mt-2 flex items-center justify-center gap-2 border border-border py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
                     >
                       <Send size={15} />
-                      Send order by email
+                      Send order request
                     </button>
                   </>
                 ) : (
@@ -289,7 +413,7 @@ const CartDrawer = () => {
                       className="w-full flex items-center justify-center gap-2 bg-cajun hover:bg-cajun-light text-primary-foreground py-3.5 rounded-full font-semibold transition-all hover:shadow-lg disabled:opacity-50"
                     >
                       <Send size={15} />
-                      Send order by email
+                      Send order request
                     </button>
                     <a
                       href="tel:8003187135"
@@ -299,8 +423,8 @@ const CartDrawer = () => {
                       Call 800-318-7135
                     </a>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      Orders are currently handled by email or phone for Houston, TX; Natchitoches, LA; Baton Rouge,
-                      LA; Little Rock, Arkansas; and surrounding areas.
+                      Orders are currently handled by email or cell phone for Houston, TX; Natchitoches, LA; Baton
+                      Rouge, LA; Little Rock, Arkansas; and surrounding areas.
                     </p>
                   </>
                 )}

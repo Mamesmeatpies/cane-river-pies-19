@@ -94,13 +94,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
   const cartSubtotal = items.reduce((sum, i) => sum + i.priceNum * i.quantity, 0);
-  const appliedPromo = promoCode ? getAppliedPromo(promoCode, cartSubtotal) : null;
+  const appliedPromo = promoCode ? getAppliedPromo(promoCode, cartSubtotal, items) : null;
   const promoDiscount = appliedPromo?.discountAmount ?? 0;
   const totalPrice = Math.max(0, cartSubtotal - promoDiscount);
 
   const applyPromoCode = (code: string) => {
     const normalizedCode = normalizePromoCode(code);
-    const promo = getAppliedPromo(normalizedCode, cartSubtotal);
+    const promo = getAppliedPromo(normalizedCode, cartSubtotal, items);
 
     if (!promo) {
       return false;

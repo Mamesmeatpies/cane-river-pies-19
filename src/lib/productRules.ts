@@ -1,8 +1,8 @@
-export const MINI_PRODUCT_ID = "mini";
+export const MINI_PRODUCT_IDS = ["mini", "mini-unfried"] as const;
 export const MINI_PRICE_PER_DOZEN = 15;
 export const MINI_MINIMUM_DOZENS = 2;
 
-export const isMiniProduct = (productId: string) => productId === MINI_PRODUCT_ID;
+export const isMiniProduct = (productId: string) => MINI_PRODUCT_IDS.includes(productId as (typeof MINI_PRODUCT_IDS)[number]);
 
 export const getMinimumQuantity = (productId: string) =>
   isMiniProduct(productId) ? MINI_MINIMUM_DOZENS : 1;
