@@ -3,7 +3,7 @@ import { MINI_PRODUCT_IDS } from "@/lib/productRules";
 export type PromoCode = {
   code: string;
   label: string;
-  type: "percent" | "amount";
+  type: "percent" | "amount" | "amount_per_quantity";
   value: number;
   excludedProductIds?: string[];
   startsAt?: string;
@@ -45,8 +45,8 @@ export const PROMO_CODES: PromoCode[] = [
   },
   {
     code: "KIM",
-    label: "$5 off",
-    type: "amount",
+    label: "$5 off per dozen",
+    type: "amount_per_quantity",
     value: 5,
     channelHint: "Direct outreach",
   },
@@ -92,8 +92,22 @@ export const getAppliedPromo = (code: string, subtotal: number, items?: PromoCar
     return null;
   }
 
+  const eligibleQuantity = items
+    ? items.reduce((sum, item) => {
+        if (promo.excludedProductIds?.includes(item.id)) {
+          return sum;
+        }
+
+        return sum + item.quantity;
+      }, 0)
+    : 0;
+
   const discountAmount =
-    promo.type === "percent" ? roundCurrency(eligibleSubtotal * (promo.value / 100)) : promo.value;
+    promo.type === "percent"
+      ? roundCurrency(eligibleSubtotal * (promo.value / 100))
+      : promo.type === "amount_per_quantity"
+        ? promo.value * eligibleQuantity
+        : promo.value;
 
   return {
     code: promo.code,
