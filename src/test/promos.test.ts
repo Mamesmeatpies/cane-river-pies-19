@@ -22,11 +22,16 @@ describe("promos", () => {
     });
   });
 
-  it("applies the kim promo as a $5 discount", () => {
-    expect(getAppliedPromo("kim", 42)).toEqual({
+  it("applies the kim promo as $5 off per dozen", () => {
+    expect(
+      getAppliedPromo("kim", 90, [
+        { id: "beef-pork", priceNum: 30, quantity: 2 },
+        { id: "turkey", priceNum: 30, quantity: 1 },
+      ])
+    ).toEqual({
       code: "KIM",
-      label: "$5 off",
-      discountAmount: 5,
+      label: "$5 off per dozen",
+      discountAmount: 15,
     });
   });
 
