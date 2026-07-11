@@ -48,10 +48,10 @@ const HeroSection = () => {
         <a
           href="#locations"
           aria-label="Find Mame's retail stores"
-          className="flex max-w-[15rem] items-center gap-3 rounded-full border border-gold/50 bg-gold px-4 py-3 text-charcoal shadow-xl transition-all hover:-translate-y-0.5 hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-gold/50 bg-gold px-3 py-2.5 text-center text-charcoal shadow-xl transition-all hover:-translate-y-0.5 hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream"
         >
-          <Store size={24} aria-hidden="true" />
-          <span className="text-left text-xs font-bold uppercase leading-tight tracking-wide lg:text-sm">
+          <Store className="shrink-0" size={20} aria-hidden="true" />
+          <span className="text-[10px] font-bold uppercase leading-tight tracking-wide lg:text-xs">
             Available at select Walmarts
           </span>
         </a>
