@@ -22,17 +22,7 @@ const HeroSection = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal via-charcoal/70 to-charcoal/30" />
       </div>
 
-      <div className="absolute right-4 top-24 z-20 hidden w-24 sm:w-32 md:block md:w-36 lg:right-10 lg:top-28 lg:w-44">
-        <a
-          href="#locations"
-          aria-label="Find Mame's retail stores"
-          className="absolute -left-44 top-1/2 flex -translate-y-1/2 items-center gap-3 rounded-full border border-gold/50 bg-gold px-4 py-3 text-charcoal shadow-xl transition-all hover:-translate-y-[55%] hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream lg:-left-56"
-        >
-          <Store size={24} aria-hidden="true" />
-          <span className="max-w-28 text-left text-xs font-bold uppercase leading-tight tracking-wide lg:max-w-36 lg:text-sm">
-            Available at select Walmarts
-          </span>
-        </a>
+      <div className="absolute right-4 top-24 z-20 hidden items-end gap-4 md:flex md:w-36 md:flex-col lg:right-10 lg:top-28 lg:w-44">
         <button
           type="button"
           onClick={scrollToStory}
@@ -55,6 +45,16 @@ const HeroSection = () => {
             </p>
           </div>
         </button>
+        <a
+          href="#locations"
+          aria-label="Find Mame's retail stores"
+          className="flex max-w-[15rem] items-center gap-3 rounded-full border border-gold/50 bg-gold px-4 py-3 text-charcoal shadow-xl transition-all hover:-translate-y-0.5 hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream"
+        >
+          <Store size={24} aria-hidden="true" />
+          <span className="text-left text-xs font-bold uppercase leading-tight tracking-wide lg:text-sm">
+            Available at select Walmarts
+          </span>
+        </a>
       </div>
 
       {/* Content */}
