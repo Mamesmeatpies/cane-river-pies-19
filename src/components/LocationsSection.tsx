@@ -1,4 +1,7 @@
-import { MapPin } from "lucide-react";
+import { useState } from "react";
+import { MapPin, Store } from "lucide-react";
+
+import { storeLocations } from "@/data/storeLocations";
 
 const locations = [
   {
@@ -14,6 +17,16 @@ const locations = [
 ];
 
 const LocationsSection = () => {
+  const stateOptions = Array.from(
+    new Map(storeLocations.map((store) => [store.stateAbbreviation, store.state])).entries(),
+  ).map(([stateAbbreviation, state]) => ({ stateAbbreviation, state }));
+  const [selectedStoreNumber, setSelectedStoreNumber] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+  const localStores = selectedState
+    ? storeLocations.filter((store) => store.stateAbbreviation === selectedState)
+    : [];
+  const selectedStore = storeLocations.find((store) => store.storeNumber === selectedStoreNumber);
+
   return (
     <section id="locations" className="bg-cream-dark py-16 md:py-24">
       <div className="container mx-auto px-4">
@@ -25,6 +38,72 @@ const LocationsSection = () => {
           <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">
             Pick up Mame's Cane River Meat Pies at these locations or order online.
           </p>
+        </div>
+
+        <div className="mx-auto mb-10 max-w-3xl rounded-lg border border-border bg-card p-5 shadow-md sm:p-6 md:mb-12">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-cajun/10">
+              <Store className="text-cajun" size={22} />
+            </div>
+            <div>
+              <h3 className="font-serif text-xl font-bold text-foreground">Available at these Walmart Locations</h3>
+              <p className="text-sm text-muted-foreground">Choose your state, then choose a local store.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-widest text-cajun">State</span>
+              <select
+                value={selectedState}
+                onChange={(event) => {
+                  setSelectedState(event.target.value);
+                  setSelectedStoreNumber("");
+                }}
+                aria-label="Select a state"
+                className="h-12 w-full rounded-lg border border-border bg-background px-4 text-left text-sm text-foreground shadow-sm outline-none transition-all focus:ring-2 focus:ring-cajun/40 sm:text-base"
+              >
+                <option value="">Select a state</option>
+                {stateOptions.map((stateOption) => (
+                  <option key={stateOption.stateAbbreviation} value={stateOption.stateAbbreviation}>
+                    {stateOption.state}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-widest text-cajun">
+                Local Stores
+              </span>
+              <select
+                value={selectedStoreNumber}
+                onChange={(event) => setSelectedStoreNumber(event.target.value)}
+                aria-label="Select a local Walmart store"
+                disabled={!selectedState}
+                className="h-12 w-full rounded-lg border border-border bg-background px-4 text-left text-sm text-foreground shadow-sm outline-none transition-all focus:ring-2 focus:ring-cajun/40 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
+              >
+                <option value="">{selectedState ? "Select a local store" : "Choose a state first"}</option>
+                {localStores.map((store) => (
+                  <option key={store.storeNumber} value={store.storeNumber}>
+                    {store.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {selectedStore ? (
+            <div className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-4 text-left">
+              <p className="text-xs font-semibold uppercase tracking-widest text-cajun">
+                Store #{selectedStore.storeNumber}
+              </p>
+              <p className="mt-1 font-serif text-lg font-bold text-foreground">{selectedStore.storeName}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedStore.city}, {selectedStore.state}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="mx-auto mb-10 grid max-w-3xl gap-6 md:mb-12 md:grid-cols-2 md:gap-8">
