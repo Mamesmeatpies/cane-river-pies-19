@@ -1,5 +1,6 @@
 import heroImg from "@/assets/hero-meat-pies.png";
 import mamePortrait from "@/assets/mame-portrait-2026.jpg";
+import { Store } from "lucide-react";
 
 const HeroSection = () => {
   const scrollToStory = () => {
@@ -22,6 +23,16 @@ const HeroSection = () => {
       </div>
 
       <div className="absolute right-4 top-24 z-20 hidden w-24 sm:w-32 md:block md:w-36 lg:right-10 lg:top-28 lg:w-44">
+        <a
+          href="#locations"
+          aria-label="Find Mame's retail stores"
+          className="absolute -left-44 top-1/2 flex -translate-y-1/2 items-center gap-3 rounded-full border border-gold/50 bg-gold px-4 py-3 text-charcoal shadow-xl transition-all hover:-translate-y-[55%] hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream lg:-left-56"
+        >
+          <Store size={24} aria-hidden="true" />
+          <span className="max-w-28 text-left text-xs font-bold uppercase leading-tight tracking-wide lg:max-w-36 lg:text-sm">
+            Available at select Walmarts
+          </span>
+        </a>
         <button
           type="button"
           onClick={scrollToStory}
@@ -70,6 +81,17 @@ const HeroSection = () => {
             </p>
           </div>
         </button>
+
+        <a
+          href="#locations"
+          aria-label="Find Mame's retail stores"
+          className="mx-auto mb-5 flex w-fit items-center justify-center gap-2 rounded-full border border-gold/50 bg-gold px-4 py-3 text-charcoal shadow-lg transition-all hover:-translate-y-0.5 hover:bg-gold-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cream md:hidden"
+        >
+          <Store size={22} aria-hidden="true" />
+          <span className="text-xs font-bold uppercase leading-tight tracking-wide">
+            Available at select Walmarts
+          </span>
+        </a>
 
         <h1 className="mb-3 animate-fade-in-up font-serif text-4xl font-bold leading-tight text-cream sm:text-5xl md:mb-2 md:text-7xl" style={{ animationDelay: "0.15s" }}>
           Hand Crafted Meat Pies,
