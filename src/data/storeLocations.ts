@@ -269,6 +269,7 @@ const toTitleCase = (value: string) =>
 export type StoreLocation = {
   storeNumber: string;
   storeName: string;
+  address: string;
   city: string;
   state: string;
   stateAbbreviation: string;
@@ -284,6 +285,7 @@ export const storeLocations: StoreLocation[] = storeLocationRows.split("\n").map
   return {
     storeNumber,
     storeName: formattedStoreName,
+    address: formattedStoreName,
     city: formattedCity,
     state: toTitleCase(state),
     stateAbbreviation,

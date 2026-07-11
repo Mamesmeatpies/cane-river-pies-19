@@ -98,7 +98,8 @@ const LocationsSection = () => {
               <p className="text-xs font-semibold uppercase tracking-widest text-cajun">
                 Store #{selectedStore.storeNumber}
               </p>
-              <p className="mt-1 font-serif text-lg font-bold text-foreground">{selectedStore.storeName}</p>
+              <p className="mt-1 font-serif text-lg font-bold text-foreground">Walmart {selectedStore.city}</p>
+              <p className="mt-2 text-sm font-medium text-foreground">Address: {selectedStore.address}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {selectedStore.city}, {selectedStore.state}
               </p>
