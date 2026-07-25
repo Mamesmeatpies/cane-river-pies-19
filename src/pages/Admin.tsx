@@ -964,7 +964,7 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
       return;
     }
 
-    void seedDefaultProducts({ adminKey: fallbackKey });
+    void seedDefaultProducts({ adminKey: fallbackKey }).catch(() => undefined);
   }, [fallbackKey, productResult?.access, seedDefaultProducts]);
 
   const loadInbox = useCallback(async () => {
@@ -989,14 +989,6 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
-
-  useEffect(() => {
-    if (!fallbackKey) {
-      return;
-    }
-
-    void seedDefaultProducts({ adminKey: fallbackKey }).catch(() => undefined);
-  }, [fallbackKey, seedDefaultProducts]);
 
   useEffect(() => {
     const productRows = isUsingPassword ? productResult?.products : adminResult?.products;
