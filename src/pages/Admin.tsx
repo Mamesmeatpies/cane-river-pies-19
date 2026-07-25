@@ -5598,6 +5598,60 @@ const AdminPortalPasswordOnly = () => (
   />
 );
 
+const AdminPasswordGate = () => {
+  const [passwordInput, setPasswordInput] = useState("");
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedKey = passwordInput.trim();
+
+    if (!trimmedKey) {
+      return;
+    }
+
+    window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmedKey);
+    setIsUnlocked(true);
+  };
+
+  if (isUnlocked) {
+    return <AdminPortalPasswordOnly />;
+  }
+
+  return (
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="container mx-auto px-4 py-12">
+        <div className="mx-auto max-w-md space-y-5 border border-border bg-card p-6 shadow-sm">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-cajun/10 text-cajun">
+            <Lock size={22} />
+          </div>
+          <div>
+            <h1 className="font-serif text-3xl font-bold text-foreground">Admin Portal</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Enter the admin password to manage messages, orders, customers, and operations.
+            </p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(event) => setPasswordInput(event.target.value)}
+              placeholder="Admin password"
+              className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+            />
+            <button
+              type="submit"
+              className="w-full rounded-[8px] bg-cajun px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
+            >
+              Unlock admin
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+};
+
 type WorkOSBoundaryProps = {
   children: ReactNode;
 };
@@ -5627,7 +5681,7 @@ class WorkOSBoundary extends Component<WorkOSBoundaryProps, WorkOSBoundaryState>
 }
 
 const Admin = () => {
-  return <AdminPortalPasswordOnly />;
+  return <AdminPasswordGate />;
 };
 
 export default Admin;
