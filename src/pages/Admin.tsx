@@ -1,4 +1,16 @@
-import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  Component,
+  DragEvent,
+  ErrorInfo,
+  FormEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
@@ -5586,6 +5598,34 @@ const AdminPortalPasswordOnly = () => (
   />
 );
 
+type WorkOSBoundaryProps = {
+  children: ReactNode;
+};
+
+type WorkOSBoundaryState = {
+  hasError: boolean;
+};
+
+class WorkOSBoundary extends Component<WorkOSBoundaryProps, WorkOSBoundaryState> {
+  state: WorkOSBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("WorkOS admin auth failed to render", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <AdminPortalPasswordOnly />;
+    }
+
+    return this.props.children;
+  }
+}
+
 const Admin = () => {
   if (!workosClientId) {
     return <AdminPortalPasswordOnly />;
@@ -5594,16 +5634,18 @@ const Admin = () => {
   const redirectPath = window.location.pathname.startsWith("/backoffice") ? "/backoffice" : "/admin";
 
   return (
-    <AuthKitProvider
-      clientId={workosClientId}
-      apiHostname={workosApiHostname}
-      redirectUri={`${window.location.origin}${redirectPath}`}
-      onRefreshFailure={({ signIn }) => {
-        void signIn({ screenHint: "sign-in" });
-      }}
-    >
-      <AdminPortalWithAuth />
-    </AuthKitProvider>
+    <WorkOSBoundary>
+      <AuthKitProvider
+        clientId={workosClientId}
+        apiHostname={workosApiHostname}
+        redirectUri={`${window.location.origin}${redirectPath}`}
+        onRefreshFailure={({ signIn }) => {
+          void signIn({ screenHint: "sign-in" });
+        }}
+      >
+        <AdminPortalWithAuth />
+      </AuthKitProvider>
+    </WorkOSBoundary>
   );
 };
 
