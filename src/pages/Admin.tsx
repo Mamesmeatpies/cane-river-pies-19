@@ -1535,6 +1535,16 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   );
   const selectedFulfillmentOrder =
     fulfillmentOrders.find((order) => order.id === selectedFulfillmentOrderId) ?? fulfillmentOrders[0] ?? null;
+  const fulfillmentDueSoon = fulfillmentOrders.filter((order) => {
+    if (!order.neededBy) {
+      return false;
+    }
+
+    const dueAt = Date.parse(order.neededBy);
+    return Number.isFinite(dueAt) && dueAt <= Date.now() + 48 * 60 * 60 * 1000 && getOrderFulfillmentStatus(order) !== "completed";
+  }).length;
+  const fulfillmentReadyCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "ready").length;
+  const fulfillmentInKitchenCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "in_kitchen").length;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayOrderItems = orderItems.filter((item) => item.createdAt >= todayStart.getTime());
@@ -5110,16 +5120,6 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     label: formatLabel(status),
     orders: fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === status),
   }));
-  const fulfillmentDueSoon = fulfillmentOrders.filter((order) => {
-    if (!order.neededBy) {
-      return false;
-    }
-
-    const dueAt = Date.parse(order.neededBy);
-    return Number.isFinite(dueAt) && dueAt <= Date.now() + 48 * 60 * 60 * 1000 && getOrderFulfillmentStatus(order) !== "completed";
-  }).length;
-  const fulfillmentReadyCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "ready").length;
-  const fulfillmentInKitchenCount = fulfillmentOrders.filter((order) => getOrderFulfillmentStatus(order) === "in_kitchen").length;
 
   const fulfillmentPanel = (
     <div className="space-y-6">
