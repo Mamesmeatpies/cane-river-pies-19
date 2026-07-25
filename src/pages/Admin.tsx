@@ -960,12 +960,12 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const showPasswordFallback = !isUsingPassword && (!isUnlocked || Boolean(inboxError));
 
   useEffect(() => {
-    if (!fallbackKey || productResult?.access !== "granted") {
+    if (!fallbackKey || productResult?.access !== "granted" || (productResult.products?.length ?? 0) > 0) {
       return;
     }
 
     void seedDefaultProducts({ adminKey: fallbackKey }).catch(() => undefined);
-  }, [fallbackKey, productResult?.access, seedDefaultProducts]);
+  }, [fallbackKey, productResult?.access, productResult?.products, seedDefaultProducts]);
 
   const loadInbox = useCallback(async () => {
     if (!user) {
