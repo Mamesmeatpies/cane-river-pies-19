@@ -5627,26 +5627,7 @@ class WorkOSBoundary extends Component<WorkOSBoundaryProps, WorkOSBoundaryState>
 }
 
 const Admin = () => {
-  if (!workosClientId) {
-    return <AdminPortalPasswordOnly />;
-  }
-
-  const redirectPath = window.location.pathname.startsWith("/backoffice") ? "/backoffice" : "/admin";
-
-  return (
-    <WorkOSBoundary>
-      <AuthKitProvider
-        clientId={workosClientId}
-        apiHostname={workosApiHostname}
-        redirectUri={`${window.location.origin}${redirectPath}`}
-        onRefreshFailure={({ signIn }) => {
-          void signIn({ screenHint: "sign-in" });
-        }}
-      >
-        <AdminPortalWithAuth />
-      </AuthKitProvider>
-    </WorkOSBoundary>
-  );
+  return <AdminPortalPasswordOnly />;
 };
 
 export default Admin;
