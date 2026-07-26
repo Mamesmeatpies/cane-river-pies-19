@@ -58,7 +58,8 @@ const Navbar = () => {
             href="#shop"
             className="bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg"
           >
-            Live in our pick up area, ORDER NOW
+            Live in our pick up area,
+            <span className="block">ORDER NOW</span>
           </a>
         </div>
 
@@ -107,7 +108,8 @@ const Navbar = () => {
                 onClick={() => setOpen(false)}
                 className="mt-2 block rounded-full bg-cajun px-8 py-3 text-center text-sm font-semibold text-cream transition-all hover:bg-cajun-light"
               >
-                Live in our pick up area, ORDER NOW
+                Live in our pick up area,
+                <span className="block">ORDER NOW</span>
               </a>
             </li>
           </ul>
