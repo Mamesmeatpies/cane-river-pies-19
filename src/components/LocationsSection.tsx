@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Store } from "lucide-react";
+import { MapPin, Search, Store } from "lucide-react";
 
 import { storeLocations } from "@/data/storeLocations";
 
@@ -22,8 +22,20 @@ const LocationsSection = () => {
   ).map(([stateAbbreviation, state]) => ({ stateAbbreviation, state }));
   const [selectedStoreNumber, setSelectedStoreNumber] = useState("");
   const [selectedState, setSelectedState] = useState("");
+  const [storeSearch, setStoreSearch] = useState("");
+  const normalizedSearch = storeSearch.trim().toLowerCase();
   const localStores = selectedState
     ? storeLocations.filter((store) => store.stateAbbreviation === selectedState)
+    : [];
+  const searchResults = normalizedSearch
+    ? storeLocations
+        .filter((store) =>
+          [store.storeNumber, store.storeName, store.address, store.city, store.state, store.stateAbbreviation]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedSearch),
+        )
+        .slice(0, 8)
     : [];
   const selectedStore = storeLocations.find((store) => store.storeNumber === selectedStoreNumber);
 
@@ -47,9 +59,57 @@ const LocationsSection = () => {
             </div>
             <div>
               <h3 className="font-serif text-xl font-bold text-foreground">Available at these Walmart Locations</h3>
-              <p className="text-sm text-muted-foreground">Choose your state, then choose a local store.</p>
+              <p className="text-sm text-muted-foreground">Search the list or choose your state, then choose a local store.</p>
             </div>
           </div>
+
+          <label className="mb-5 block">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-widest text-cajun">
+              Search Walmart Stores
+            </span>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+              <input
+                type="search"
+                value={storeSearch}
+                onChange={(event) => setStoreSearch(event.target.value)}
+                placeholder="Search by city, store number, or address"
+                aria-label="Search Walmart stores"
+                className="h-12 w-full rounded-lg border border-border bg-background py-3 pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-all placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/40 sm:text-base"
+              />
+            </div>
+          </label>
+
+          {normalizedSearch ? (
+            <div className="mb-5 rounded-lg border border-border bg-background p-3">
+              {searchResults.length > 0 ? (
+                <div className="space-y-2">
+                  {searchResults.map((store) => (
+                    <button
+                      key={store.storeNumber}
+                      type="button"
+                      onClick={() => {
+                        setSelectedState(store.stateAbbreviation);
+                        setSelectedStoreNumber(store.storeNumber);
+                      }}
+                      className="w-full rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-gold/50 hover:bg-gold/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cajun/40"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-widest text-cajun">
+                        Store #{store.storeNumber}
+                      </p>
+                      <p className="mt-1 font-serif text-base font-bold text-foreground">Walmart {store.city}</p>
+                      <p className="mt-1 text-sm font-medium text-foreground">Address: {store.address}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {store.city}, {store.state}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="p-2 text-sm text-muted-foreground">No Walmart stores found for that search.</p>
+              )}
+            </div>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
