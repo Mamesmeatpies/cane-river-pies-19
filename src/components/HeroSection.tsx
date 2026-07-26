@@ -116,7 +116,7 @@ const HeroSection = () => {
         <div className="mx-auto flex max-w-sm flex-col gap-3 animate-fade-in-up sm:max-w-none sm:flex-row sm:justify-center sm:gap-4" style={{ animationDelay: "0.5s" }}>
           <a
             href="#shop"
-            className="rounded-full bg-cajun px-8 py-4 text-base font-semibold text-cream transition-all hover:-translate-y-0.5 hover:bg-cajun-light hover:shadow-2xl hover:shadow-cajun/30 sm:px-10 sm:text-lg"
+            className="rounded-full bg-cajun px-8 py-4 text-center text-base font-semibold text-cream transition-all hover:-translate-y-0.5 hover:bg-cajun-light hover:shadow-2xl hover:shadow-cajun/30 sm:px-10 sm:text-lg"
           >
             Live in our pick up area,
             <span className="block">ORDER NOW</span>

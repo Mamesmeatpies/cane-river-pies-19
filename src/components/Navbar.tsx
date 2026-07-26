@@ -56,7 +56,7 @@ const Navbar = () => {
           </button>
           <a
             href="#shop"
-            className="bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:shadow-lg"
+            className="bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-center text-sm font-semibold transition-all hover:shadow-lg"
           >
             Live in our pick up area,
             <span className="block">ORDER NOW</span>
