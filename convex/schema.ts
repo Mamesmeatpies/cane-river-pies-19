@@ -145,7 +145,7 @@ export default defineSchema({
     name: v.string(),
     email: v.optional(v.string()),
     phone: v.string(),
-    preferredContactMethod: v.union(v.literal("email"), v.literal("phone")),
+    preferredContactMethod: v.optional(v.union(v.literal("email"), v.literal("phone"))),
     salesperson: v.optional(v.string()),
     notes: v.optional(v.string()),
     paymentMethod: v.union(v.literal("stripe"), v.literal("email")),
