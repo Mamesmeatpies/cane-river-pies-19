@@ -118,7 +118,8 @@ const HeroSection = () => {
             href="#shop"
             className="rounded-full bg-cajun px-8 py-4 text-base font-semibold text-cream transition-all hover:-translate-y-0.5 hover:bg-cajun-light hover:shadow-2xl hover:shadow-cajun/30 sm:px-10 sm:text-lg"
           >
-            Buy Now
+            Live in our pick up area,
+            <span className="block">ORDER NOW</span>
           </a>
           <a
             href="#locations"
