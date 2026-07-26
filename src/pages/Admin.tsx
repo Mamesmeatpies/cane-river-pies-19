@@ -391,6 +391,8 @@ type AnalyticsSummary = {
 const workosClientId = import.meta.env.VITE_WORKOS_CLIENT_ID as string | undefined;
 const workosApiHostname = import.meta.env.VITE_WORKOS_API_HOSTNAME as string | undefined;
 const ADMIN_KEY_STORAGE = "mames-admin-key";
+const ADMIN_EMAIL_STORAGE = "mames-admin-email";
+const ADMIN_USERNAME = "mamesmeatpies@gmail.com";
 const adminNavItems: Array<{ id: AdminPage; label: string; icon: typeof LayoutDashboard }> = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "orders", label: "Orders", icon: PackageCheck },
@@ -812,6 +814,16 @@ const getStoredAdminKey = () => {
   return window.localStorage.getItem(ADMIN_KEY_STORAGE) ?? "";
 };
 
+const getStoredAdminEmail = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return window.localStorage.getItem(ADMIN_EMAIL_STORAGE) ?? "";
+};
+
+const isConfiguredAdminEmail = (value: string) => value.trim().toLowerCase() === ADMIN_USERNAME;
+
 const AdminConfigurationMissing = () => (
   <main className="min-h-screen bg-background text-foreground">
     <header className="border-b border-border bg-card">
@@ -873,8 +885,10 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
   const [adminResult, setAdminResult] = useState<AdminInboxResult | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
+  const [fallbackEmail, setFallbackEmail] = useState(getStoredAdminEmail);
   const [fallbackInput, setFallbackInput] = useState(getStoredAdminKey);
   const [fallbackKey, setFallbackKey] = useState(getStoredAdminKey);
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [promoSearch, setPromoSearch] = useState("");
@@ -2444,12 +2458,29 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
 
   const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const trimmedEmail = fallbackEmail.trim();
     const trimmedKey = fallbackInput.trim();
 
+    if (!isConfiguredAdminEmail(trimmedEmail)) {
+      setFallbackError("That admin username is not recognized.");
+      setFallbackKey("");
+      window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+      return;
+    }
+
+    if (!trimmedKey) {
+      setFallbackError("Enter the admin password.");
+      setFallbackKey("");
+      window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+      return;
+    }
+
+    window.localStorage.setItem(ADMIN_EMAIL_STORAGE, trimmedEmail);
     if (trimmedKey) {
       window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmedKey);
     }
 
+    setFallbackError(null);
     setFallbackKey(trimmedKey);
     setAdminResult(null);
     setSelectedId(null);
@@ -2459,9 +2490,12 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
 
   const handleSignOut = () => {
     setAdminResult(null);
+    window.localStorage.removeItem(ADMIN_EMAIL_STORAGE);
     window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+    setFallbackEmail("");
     setFallbackInput("");
     setFallbackKey("");
+    setFallbackError(null);
     setSelectedId(null);
     setSelectedMarketingDraftId(null);
     setSelectedMarketingOutputId(null);
@@ -2510,6 +2544,9 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
           </button>
         </div>
       )}
+      {fallbackError && (
+        <div className="border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">{fallbackError}</div>
+      )}
       {inboxError && (
         <div className="flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>{inboxError}</span>
@@ -2531,12 +2568,21 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
                 If WorkOS access is unavailable right now, the password fallback will still unlock products and inventory.
               </p>
             </div>
-            <form onSubmit={handlePasswordSubmit} className="flex w-full max-w-md flex-col gap-3 sm:flex-row">
+            <form onSubmit={handlePasswordSubmit} className="flex w-full max-w-md flex-col gap-3">
+              <input
+                type="email"
+                value={fallbackEmail}
+                onChange={(event) => setFallbackEmail(event.target.value)}
+                placeholder="Admin email"
+                autoComplete="username"
+                className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+              />
               <input
                 type="password"
                 value={fallbackInput}
                 onChange={(event) => setFallbackInput(event.target.value)}
                 placeholder="Admin password"
+                autoComplete="current-password"
                 className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
               />
               <button
@@ -5487,33 +5533,45 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
             <div>
               <h1 className="font-serif text-3xl font-bold text-foreground">Admin Portal</h1>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Sign in to manage messages, orders, customers, and operations.
+                Log in with the admin email and password to manage messages, orders, customers, and operations.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => signIn({ screenHint: "sign-in" })}
-              className="w-full rounded-[8px] bg-cajun px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
-            >
-              Sign in with WorkOS
-            </button>
-            <div className="border-t border-border pt-5">
-              <p className="mb-3 text-sm font-semibold text-foreground">WorkOS not ready?</p>
+            <div>
               <form onSubmit={handlePasswordSubmit} className="space-y-3">
+                <input
+                  type="email"
+                  value={fallbackEmail}
+                  onChange={(event) => setFallbackEmail(event.target.value)}
+                  placeholder="Admin email"
+                  autoComplete="username"
+                  className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+                />
                 <input
                   type="password"
                   value={fallbackInput}
                   onChange={(event) => setFallbackInput(event.target.value)}
                   placeholder="Admin password"
+                  autoComplete="current-password"
                   className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
                 />
+                {fallbackError && <p className="text-sm text-destructive">{fallbackError}</p>}
                 <button
                   type="submit"
-                  className="w-full rounded-[8px] border border-border px-4 py-3 font-semibold text-foreground transition-colors hover:bg-muted"
+                  className="w-full rounded-[8px] bg-cajun px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
                 >
-                  Use admin password instead
+                  Log in
                 </button>
               </form>
+            </div>
+            <div className="border-t border-border pt-5">
+              <p className="mb-3 text-sm font-semibold text-foreground">Or use WorkOS</p>
+              <button
+                type="button"
+                onClick={() => signIn({ screenHint: "sign-in" })}
+                className="w-full rounded-[8px] border border-border px-4 py-3 font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                Sign in with WorkOS
+              </button>
             </div>
           </div>
         </section>
@@ -5606,18 +5664,29 @@ const AdminPortalPasswordOnly = () => (
 );
 
 const AdminPasswordGate = () => {
+  const [emailInput, setEmailInput] = useState(getStoredAdminEmail);
   const [passwordInput, setPasswordInput] = useState("");
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const trimmedEmail = emailInput.trim();
     const trimmedKey = passwordInput.trim();
 
-    if (!trimmedKey) {
+    if (!isConfiguredAdminEmail(trimmedEmail)) {
+      setLoginError("That admin username is not recognized.");
       return;
     }
 
+    if (!trimmedKey) {
+      setLoginError("Enter the admin password.");
+      return;
+    }
+
+    window.localStorage.setItem(ADMIN_EMAIL_STORAGE, trimmedEmail);
     window.localStorage.setItem(ADMIN_KEY_STORAGE, trimmedKey);
+    setLoginError(null);
     setIsUnlocked(true);
   };
 
@@ -5635,22 +5704,32 @@ const AdminPasswordGate = () => {
           <div>
             <h1 className="font-serif text-3xl font-bold text-foreground">Admin Portal</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Enter the admin password to manage messages, orders, customers, and operations.
+              Enter the admin email and password to manage messages, orders, customers, and operations.
             </p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(event) => setEmailInput(event.target.value)}
+              placeholder="Admin email"
+              autoComplete="username"
+              className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
+            />
             <input
               type="password"
               value={passwordInput}
               onChange={(event) => setPasswordInput(event.target.value)}
               placeholder="Admin password"
+              autoComplete="current-password"
               className="w-full rounded-[8px] border border-border bg-background px-4 py-3 text-foreground outline-none transition-all focus:ring-2 focus:ring-cajun/50"
             />
+            {loginError && <p className="text-sm text-destructive">{loginError}</p>}
             <button
               type="submit"
               className="w-full rounded-[8px] bg-cajun px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-cajun-light"
             >
-              Unlock admin
+              Log in
             </button>
           </form>
         </div>
