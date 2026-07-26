@@ -21,10 +21,28 @@ const getApiHostname = () => process.env.WORKOS_API_HOSTNAME ?? "api.workos.com"
 const getJwksUrl = (clientId: string) =>
   process.env.WORKOS_JWKS_URL ?? `https://${getApiHostname()}/sso/jwks/${clientId}`;
 
-const getIssuer = () => process.env.WORKOS_ISSUER ?? `https://${getApiHostname()}/`;
+const getIssuer = (clientId: string) => process.env.WORKOS_ISSUER ?? `https://${getApiHostname()}/user_management/${clientId}`;
+
+const getWorkOSApiKey = () =>
+  process.env.BACKOFFICE_WORKOS_API_KEY ?? process.env.WORKOS_SERVER_API_KEY ?? process.env.WORKOS_API_KEY;
+
+const getAdminUserIds = () =>
+  splitList(process.env.BACKOFFICE_WORKOS_ADMIN_USER_IDS ?? process.env.WORKOS_ADMIN_USER_IDS);
+
+const tokenMatchesClient = (payload: { aud?: string | string[]; client_id?: unknown }, clientId: string) => {
+  if (typeof payload.client_id === "string") {
+    return payload.client_id === clientId;
+  }
+
+  if (Array.isArray(payload.aud)) {
+    return payload.aud.includes(clientId);
+  }
+
+  return payload.aud === clientId;
+};
 
 const getWorkOSUser = async (userId: string): Promise<WorkOSUser | null> => {
-  const apiKey = process.env.WORKOS_API_KEY;
+  const apiKey = getWorkOSApiKey();
 
   if (!apiKey) {
     return null;
@@ -46,8 +64,10 @@ const getWorkOSUser = async (userId: string): Promise<WorkOSUser | null> => {
 
 const verifyWorkOSToken = async (accessToken: string) => {
   const clientId = process.env.WORKOS_CLIENT_ID;
+  const adminEmails = splitList(process.env.WORKOS_ADMIN_EMAILS);
+  const adminUserIds = getAdminUserIds();
 
-  if (!clientId || !process.env.WORKOS_API_KEY || !process.env.WORKOS_ADMIN_EMAILS) {
+  if (!clientId || (adminEmails.length === 0 && adminUserIds.length === 0)) {
     return {
       access: "missing" as const,
       user: null,
@@ -56,27 +76,32 @@ const verifyWorkOSToken = async (accessToken: string) => {
 
   const jwks = createRemoteJWKSet(new URL(getJwksUrl(clientId)));
   const { payload } = await jwtVerify(accessToken, jwks, {
-    audience: clientId,
-    issuer: getIssuer(),
+    issuer: getIssuer(clientId),
   });
 
   const userId = payload.sub;
 
-  if (!userId) {
+  if (!userId || !tokenMatchesClient(payload as typeof payload & { client_id?: unknown }, clientId)) {
     return {
       access: "denied" as const,
       user: null,
     };
   }
 
+  if (adminUserIds.includes(userId.toLowerCase())) {
+    return {
+      access: "granted" as const,
+      user: { id: userId },
+    };
+  }
+
   const user = await getWorkOSUser(userId);
-  const adminEmails = splitList(process.env.WORKOS_ADMIN_EMAILS);
   const email = user?.email?.toLowerCase();
 
   if (!email || !adminEmails.includes(email)) {
     return {
       access: "denied" as const,
-      user,
+      user: user ?? { id: userId },
     };
   }
 

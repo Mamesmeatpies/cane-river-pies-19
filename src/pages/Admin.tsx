@@ -850,6 +850,7 @@ type AdminPortalAuthProps = {
   signOut: (options?: { returnTo?: string }) => Promise<void> | void;
   user:
     | {
+        id?: string | null;
         email?: string | null;
       }
     | null;
@@ -2474,18 +2475,32 @@ const AdminPortalContent = ({ getAccessToken, authLoading, signIn, signOut, user
     <>
       {access === "missing" && (
         <div className="border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground">
-          WorkOS admin access is not fully configured. Set <span className="font-semibold">WORKOS_CLIENT_ID</span>,{" "}
-          <span className="font-semibold">WORKOS_API_KEY</span>, and{" "}
+          WorkOS admin access is not fully configured. Set <span className="font-semibold">WORKOS_CLIENT_ID</span> and either{" "}
+          <span className="font-semibold">WORKOS_ADMIN_USER_IDS</span> or{" "}
+          <span className="font-semibold">WORKOS_API_KEY</span> plus{" "}
           <span className="font-semibold">WORKOS_ADMIN_EMAILS</span> in Convex.
         </div>
       )}
       {access === "denied" && (
         <div className="flex flex-col gap-3 border border-destructive/30 bg-destructive/10 p-4 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            {isUsingPassword
-              ? "That admin password did not match. Try again with the current password."
-              : "Your WorkOS account is not allowed to view this admin portal."}
-          </span>
+          <div className="space-y-1">
+            <p>
+              {isUsingPassword
+                ? "That admin password did not match. Try again with the current password."
+                : "Your WorkOS account is not allowed to view this admin portal."}
+            </p>
+            {!isUsingPassword && user && (
+              <p className="text-muted-foreground">
+                Signed in as {user.email ?? "unknown email"}
+                {user.id ? (
+                  <>
+                    {" "}
+                    with WorkOS user ID <span className="font-mono text-xs text-foreground">{user.id}</span>.
+                  </>
+                ) : null}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleSignOut}
@@ -5575,7 +5590,7 @@ const AdminPortalWithAuth = () => {
       authLoading={authLoading}
       signIn={signIn}
       signOut={signOut}
-      user={user ? { email: user.email } : null}
+      user={user ? { id: user.id, email: user.email } : null}
     />
   );
 };
@@ -5673,7 +5688,17 @@ class WorkOSBoundary extends Component<WorkOSBoundaryProps, WorkOSBoundaryState>
 }
 
 const Admin = () => {
-  return <AdminPasswordGate />;
+  if (!workosClientId) {
+    return <AdminPasswordGate />;
+  }
+
+  return (
+    <WorkOSBoundary>
+      <AuthKitProvider clientId={workosClientId} apiHostname={workosApiHostname}>
+        <AdminPortalWithAuth />
+      </AuthKitProvider>
+    </WorkOSBoundary>
+  );
 };
 
 export default Admin;
