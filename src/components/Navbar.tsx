@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Menu, X, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import BuyNowPrompt from "@/components/BuyNowPrompt";
 
 const navLinks = [
   { label: "Home", href: "#hero" },
@@ -54,13 +55,12 @@ const Navbar = () => {
               </span>
             )}
           </button>
-          <a
-            href="#shop"
+          <BuyNowPrompt
             className="bg-cajun hover:bg-cajun-light text-cream px-6 py-2.5 rounded-full text-center text-sm font-semibold transition-all hover:shadow-lg"
           >
             Live in our pick up area,
             <span className="block">ORDER NOW</span>
-          </a>
+          </BuyNowPrompt>
         </div>
 
         {/* Mobile toggle */}
@@ -103,14 +103,13 @@ const Navbar = () => {
               </li>
             ))}
             <li>
-              <a
-                href="#shop"
-                onClick={() => setOpen(false)}
+              <BuyNowPrompt
+                onOpen={() => setOpen(false)}
                 className="mt-2 block rounded-full bg-cajun px-8 py-3 text-center text-sm font-semibold text-cream transition-all hover:bg-cajun-light"
               >
                 Live in our pick up area,
                 <span className="block">ORDER NOW</span>
-              </a>
+              </BuyNowPrompt>
             </li>
           </ul>
         </div>

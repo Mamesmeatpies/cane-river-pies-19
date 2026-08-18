@@ -1,6 +1,7 @@
 import heroImg from "@/assets/hero-meat-pies.png";
 import mamePortrait from "@/assets/mame-portrait-2026.jpg";
 import { Store } from "lucide-react";
+import BuyNowPrompt from "@/components/BuyNowPrompt";
 
 const HeroSection = () => {
   const scrollToStory = () => {
@@ -114,13 +115,12 @@ const HeroSection = () => {
         </div>
 
         <div className="mx-auto flex max-w-sm flex-col gap-3 animate-fade-in-up sm:max-w-none sm:flex-row sm:justify-center sm:gap-4" style={{ animationDelay: "0.5s" }}>
-          <a
-            href="#shop"
+          <BuyNowPrompt
             className="rounded-full bg-cajun px-8 py-4 text-center text-base font-semibold text-cream transition-all hover:-translate-y-0.5 hover:bg-cajun-light hover:shadow-2xl hover:shadow-cajun/30 sm:px-10 sm:text-lg"
           >
             Live in our pick up area,
             <span className="block">ORDER NOW</span>
-          </a>
+          </BuyNowPrompt>
           <a
             href="#locations"
             className="rounded-full border-2 border-gold/60 px-8 py-4 text-base font-semibold text-gold transition-all hover:-translate-y-0.5 hover:bg-gold/10 sm:px-10 sm:text-lg"
