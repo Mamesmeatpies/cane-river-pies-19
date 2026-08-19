@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useAction } from "convex/react";
+import { Phone } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -13,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
+import meatPiesImage from "@/assets/mini-pies-tray.png";
+import mameLegacyPhoto from "@/assets/mame-portrait-2026 2.jpg";
 
 type BuyNowPromptProps = {
   children: ReactNode;
@@ -32,8 +35,9 @@ const BuyNowPrompt = ({ children, className, onOpen }: BuyNowPromptProps) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [isHuman, setIsHuman] = useState(false);
+  const [humanAnswer, setHumanAnswer] = useState<"pies" | "mame" | "phone" | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isHuman = humanAnswer === "pies";
 
   const handleSignup = async (event: FormEvent) => {
     event.preventDefault();
@@ -52,7 +56,7 @@ const BuyNowPrompt = ({ children, className, onOpen }: BuyNowPromptProps) => {
       });
       setName("");
       setEmail("");
-      setIsHuman(false);
+      setHumanAnswer(null);
       setOpen(false);
       goToSection("shop");
     } catch {
@@ -103,19 +107,51 @@ const BuyNowPrompt = ({ children, className, onOpen }: BuyNowPromptProps) => {
             maxLength={255}
             className="w-full rounded-xl border border-border bg-background px-4 py-3 text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-cajun/50"
           />
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-left text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={isHuman}
-              onChange={(event) => setIsHuman(event.target.checked)}
-              required
-              className="h-5 w-5 shrink-0 accent-cajun"
-            />
-            <span>
-              <span className="block font-semibold">Are you human?</span>
-              <span className="block text-xs text-muted-foreground">Yes, I am a real person.</span>
-            </span>
-          </label>
+          <fieldset className="rounded-xl border border-border bg-background p-3">
+            <legend className="px-1 text-sm font-semibold text-foreground">Are you human?</legend>
+            <p className="mb-3 text-xs text-muted-foreground">Select the picture that contains meat pies.</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "pies" as const, label: "Meat pies" },
+                { id: "mame" as const, label: "Mame" },
+                { id: "phone" as const, label: "Phone" },
+              ].map((option) => (
+                <label
+                  key={option.id}
+                  className={cn(
+                    "cursor-pointer overflow-hidden rounded-lg border-2 bg-muted transition-all focus-within:ring-2 focus-within:ring-cajun/50",
+                    humanAnswer === option.id ? "border-cajun ring-2 ring-cajun/20" : "border-transparent hover:border-gold/60",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="human-picture-check"
+                    value={option.id}
+                    checked={humanAnswer === option.id}
+                    onChange={() => setHumanAnswer(option.id)}
+                    className="sr-only"
+                    required
+                  />
+                  {option.id !== "phone" ? (
+                    <img
+                      src={option.id === "pies" ? meatPiesImage : mameLegacyPhoto}
+                      alt={option.id === "pies" ? "A tray of meat pies" : "A portrait of Mame in a red jacket"}
+                      className="aspect-square w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-cream-dark text-cajun" aria-label={option.label}>
+                      <Phone size={38} aria-hidden="true" />
+                      <span className="text-xs font-bold uppercase tracking-wide">{option.label}</span>
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+            {humanAnswer && !isHuman && (
+              <p className="mt-2 text-xs font-semibold text-destructive">That is not the meat-pie picture. Try again.</p>
+            )}
+            {isHuman && <p className="mt-2 text-xs font-semibold text-emerald-700">Human check complete.</p>}
+          </fieldset>
           <button
             type="submit"
             disabled={submitting || !isHuman}
